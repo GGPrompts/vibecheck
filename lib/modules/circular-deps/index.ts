@@ -136,8 +136,8 @@ const runner: ModuleRunner = {
           score: -1,
           confidence: 0,
           findings: [],
-          metrics: {},
-          summary: `dependency-cruiser failed: ${error instanceof Error ? error.message : String(error)}`,
+          metrics: { error: true },
+          summary: `Skipped: dependency-cruiser unavailable or failed. Install with: npm install -D dependency-cruiser`,
         };
       }
     }
