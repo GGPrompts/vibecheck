@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import { nanoid } from 'nanoid';
-import { eq } from 'drizzle-orm';
+import { eq, and, desc, ne } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { scans, moduleResults, findings as findingsTable } from '@/lib/db/schema';
 import { getEnabledModules } from './registry';
@@ -156,6 +156,9 @@ export async function runScan(
     }
   }
 
+  // ── Fingerprint-based status tracking ──
+  await reconcileFindingStatuses(scanId, repoId);
+
   // Compute overall score
   const overallScore = computeOverallScore(resultSummaries, config?.weights);
   const durationMs = Date.now() - startTime;
@@ -171,4 +174,166 @@ export async function runScan(
     .run();
 
   return scanId;
+}
+
+// ── Internal helpers for fingerprint reconciliation ──
+
+interface FingerprintRecord {
+  id: string;
+  fingerprint: string;
+  moduleResultId: string | null;
+  severity: string;
+  filePath: string | null;
+  line: number | null;
+  message: string;
+  category: string;
+  status: string;
+}
+
+/**
+ * Load all findings for a given scan by joining through moduleResults.
+ */
+function loadFindingsForScan(targetScanId: string): FingerprintRecord[] {
+  const results = db
+    .select()
+    .from(moduleResults)
+    .where(eq(moduleResults.scanId, targetScanId))
+    .all();
+
+  const allFindings: FingerprintRecord[] = [];
+  for (const mr of results) {
+    const rows = db
+      .select()
+      .from(findingsTable)
+      .where(eq(findingsTable.moduleResultId, mr.id))
+      .all();
+    allFindings.push(...rows);
+  }
+  return allFindings;
+}
+
+/**
+ * After all modules have run for the current scan, compare fingerprints
+ * against previous scans to set finding statuses:
+ *   - new: fingerprint not in previous scan
+ *   - recurring: fingerprint present in previous scan
+ *   - fixed: fingerprint in previous scan but not current (create a record)
+ *   - regressed: was fixed in previous scan but reappears now
+ */
+async function reconcileFindingStatuses(
+  currentScanId: string,
+  repoId: string
+): Promise<void> {
+  // Find the most recent completed scan for this repo (before the current one)
+  const previousScans = db
+    .select()
+    .from(scans)
+    .where(
+      and(
+        eq(scans.repoId, repoId),
+        eq(scans.status, 'completed'),
+        ne(scans.id, currentScanId)
+      )
+    )
+    .orderBy(desc(scans.createdAt))
+    .limit(2)
+    .all();
+
+  if (previousScans.length === 0) {
+    // No previous scan — all findings stay as 'new' (default)
+    return;
+  }
+
+  const prevScan = previousScans[0];
+  const prevFindings = loadFindingsForScan(prevScan.id);
+  const prevFingerprints = new Set(prevFindings.map((f) => f.fingerprint));
+
+  // Check 2 scans back for regression detection
+  let twoBackFingerprints: Set<string> | null = null;
+  let twoBackFixedFingerprints: Set<string> | null = null;
+
+  if (previousScans.length >= 2) {
+    const twoBackScan = previousScans[1];
+    const twoBackFindings = loadFindingsForScan(twoBackScan.id);
+    twoBackFingerprints = new Set(twoBackFindings.map((f) => f.fingerprint));
+
+    // Fingerprints that were 'fixed' in the previous scan (existed 2 scans back
+    // but not in the previous scan)
+    twoBackFixedFingerprints = new Set<string>();
+    for (const fp of twoBackFingerprints) {
+      if (!prevFingerprints.has(fp)) {
+        twoBackFixedFingerprints.add(fp);
+      }
+    }
+    // Also include findings explicitly marked fixed in the previous scan
+    for (const f of prevFindings) {
+      if (f.status === 'fixed') {
+        twoBackFixedFingerprints.add(f.fingerprint);
+      }
+    }
+  }
+
+  // Load current findings
+  const currentFindings = loadFindingsForScan(currentScanId);
+  const currentFingerprints = new Set(currentFindings.map((f) => f.fingerprint));
+
+  // Update statuses for current findings
+  for (const finding of currentFindings) {
+    let newStatus: string;
+
+    if (
+      twoBackFixedFingerprints &&
+      twoBackFixedFingerprints.has(finding.fingerprint)
+    ) {
+      // Was fixed in the previous scan but reappears now → regressed
+      newStatus = 'regressed';
+    } else if (prevFingerprints.has(finding.fingerprint)) {
+      // Existed in previous scan → recurring
+      newStatus = 'recurring';
+    } else {
+      // Not in previous scan → new
+      newStatus = 'new';
+    }
+
+    if (newStatus !== finding.status) {
+      db.update(findingsTable)
+        .set({ status: newStatus })
+        .where(eq(findingsTable.id, finding.id))
+        .run();
+    }
+  }
+
+  // Create 'fixed' records for previous findings not in the current scan
+  // We need a moduleResultId to attach them to — use the first one from the current scan
+  const currentModuleResults = db
+    .select()
+    .from(moduleResults)
+    .where(eq(moduleResults.scanId, currentScanId))
+    .limit(1)
+    .all();
+
+  if (currentModuleResults.length > 0) {
+    const attachResultId = currentModuleResults[0].id;
+
+    for (const prevFinding of prevFindings) {
+      // Skip findings that were already 'fixed' in the previous scan
+      if (prevFinding.status === 'fixed') continue;
+
+      if (!currentFingerprints.has(prevFinding.fingerprint)) {
+        db.insert(findingsTable)
+          .values({
+            id: nanoid(),
+            moduleResultId: attachResultId,
+            fingerprint: prevFinding.fingerprint,
+            severity: prevFinding.severity,
+            filePath: prevFinding.filePath,
+            line: prevFinding.line,
+            message: prevFinding.message,
+            category: prevFinding.category,
+            status: 'fixed',
+          })
+          .run();
+      }
+    }
+  }
 }
