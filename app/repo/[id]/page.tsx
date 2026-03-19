@@ -29,7 +29,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
-import { Loader2, Play, Sparkles, ShieldAlert, ClipboardCopy, Check, Download, FileText, Globe, Search, GitCompareArrows } from 'lucide-react';
+import { Loader2, Play, Sparkles, ShieldAlert, ClipboardCopy, Check, Download, FileText, Globe, Search, GitCompareArrows, Network } from 'lucide-react';
 
 interface RepoData {
   id: string;
@@ -793,6 +793,13 @@ export default function RepoPage() {
               </Button>
             </Link>
           )}
+
+          <Link href={`/repo/${id}/map`}>
+            <Button variant="outline">
+              <Network className="size-4" data-icon="inline-start" />
+              Map
+            </Button>
+          </Link>
         </div>
       </div>
 
