@@ -1,4 +1,5 @@
 {
+  "profile": "solo",
   "modules": {
     "compliance-hipaa": false
   },

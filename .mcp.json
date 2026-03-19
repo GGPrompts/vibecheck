@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "vibecheck": {
+      "command": "npx",
+      "args": ["tsx", "/home/builder/projects/vibecheck/mcp-server/index.ts"]
+    }
+  }
+}
