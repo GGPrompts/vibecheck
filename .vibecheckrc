@@ -1,0 +1,12 @@
+{
+  "modules": {
+    "compliance-hipaa": false
+  },
+  "thresholds": {
+    "complexity": 40,
+    "dead-code": 50
+  },
+  "ignore": [
+    "components/ui/**"
+  ]
+}

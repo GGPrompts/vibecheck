@@ -128,9 +128,22 @@ export async function runScan(
         metrics: JSON.stringify(result.metrics),
       }).run();
 
+      // Filter findings by ignore patterns from .vibecheckrc
+      const ignorePatterns: string[] = (config as ScanConfig & { rc?: { ignore?: string[] } } | undefined)?.rc?.ignore ?? [];
+      const filteredFindings = ignorePatterns.length > 0
+        ? result.findings.filter((f) => {
+            if (!f.filePath) return true;
+            return !ignorePatterns.some((pattern) => {
+              // Simple glob: "components/ui/**" matches "components/ui/sidebar.tsx"
+              const prefix = pattern.replace(/\*\*$/, '').replace(/\*$/, '');
+              return f.filePath!.startsWith(prefix);
+            });
+          })
+        : result.findings;
+
       // Save findings to DB
-      if (result.findings.length > 0) {
-        for (const finding of result.findings) {
+      if (filteredFindings.length > 0) {
+        for (const finding of filteredFindings) {
           db.insert(findingsTable).values({
             id: finding.id,
             moduleResultId,

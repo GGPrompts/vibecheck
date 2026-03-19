@@ -66,10 +66,19 @@ export function securityTemplate(findings: PrioritizedFinding[]): PromptSection 
 export function dependencyTemplate(findings: PrioritizedFinding[]): PromptSection {
   const filePath = findings[0].filePath;
   const details = findings.map((f) => `- ${f.message}`);
-  const actions = findings.map((f) => {
-    if (f.suggestion) return `- ${f.suggestion}`;
-    return '- Update the most critical packages first. Run `npm outdated` to review, then `npm update` or manually bump versions.';
-  });
+  const actions: string[] = [];
+
+  const vulns = findings.filter((f) => f.message.toLowerCase().includes('vulnerability') || f.message.includes('GHSA'));
+  const outdated = findings.filter((f) => f.message.includes('behind'));
+  const unused = findings.filter((f) => f.message.includes('Unused dep'));
+
+  if (vulns.length > 0) actions.push(`- Run \`npm audit fix\` to patch ${vulns.length} known vulnerabilities.`);
+  if (outdated.length > 0) actions.push(`- Run \`npm outdated\` and update ${outdated.length} outdated packages. Prioritize major version bumps.`);
+  if (unused.length > 0) actions.push(`- Remove ${unused.length} unused dependencies: \`npm uninstall ${unused.map((f) => f.message.match(/Unused (?:dev)?[Dd]ependency: (.+)/)?.[1]).filter(Boolean).join(' ')}\``);
+
+  if (actions.length === 0) {
+    actions.push('- Review dependency health with `npm outdated` and `npm audit`.');
+  }
 
   return {
     filePath,
@@ -83,10 +92,25 @@ export function dependencyTemplate(findings: PrioritizedFinding[]): PromptSectio
 export function gitHealthTemplate(findings: PrioritizedFinding[]): PromptSection {
   const filePath = findings[0].filePath;
   const details = findings.map((f) => `- ${locationString(f)}: ${f.message}`);
-  const actions = findings.map((f) => {
-    if (f.suggestion) return `- ${f.suggestion}`;
-    return '- Consider pairing on this file or scheduling a knowledge-sharing session to reduce bus factor risk.';
-  });
+  const actions: string[] = [];
+
+  const hasBusFactor = findings.some((f) => f.message.includes('Knowledge silo') || f.message.includes('bus factor'));
+  const hasChurn = findings.some((f) => f.message.includes('churn'));
+  const hasTodo = findings.some((f) => f.message.includes('TODO') || f.message.includes('FIXME'));
+
+  if (hasBusFactor) actions.push('- Knowledge silo detected. For team projects, ensure multiple contributors review this file. For solo projects, this is informational.');
+  if (hasChurn) actions.push('- High churn file — changes here are risky. Consider refactoring to reduce change frequency, or add tests to catch regressions.');
+  if (hasTodo) actions.push('- Old TODOs detected. Address or remove stale TODOs that are no longer relevant.');
+
+  for (const f of findings) {
+    if (f.suggestion && !actions.some((a) => a.includes(f.suggestion!))) {
+      actions.push(`- ${f.suggestion}`);
+    }
+  }
+
+  if (actions.length === 0) {
+    actions.push('- Review git history for this file to understand change patterns and ownership.');
+  }
 
   return {
     filePath,
@@ -119,7 +143,12 @@ export function genericTemplate(findings: PrioritizedFinding[]): PromptSection {
   const details = findings.map((f) => `- ${locationString(f)}: ${f.message}`);
   const actions = findings.map((f) => {
     if (f.suggestion) return `- ${f.suggestion}`;
-    return `- Investigate and fix: ${f.message}`;
+    if (f.message.includes('complexity')) return `- Refactor to reduce complexity: extract helper functions and split conditional branches.`;
+    if (f.message.includes('lines of code')) return `- Split this file into smaller, focused modules.`;
+    if (f.message.includes('Unused export')) return `- Remove the unused export or verify it is needed by external consumers.`;
+    if (f.message.includes('Knowledge silo')) return `- Informational: single-author file. For team projects, consider code review rotation.`;
+    if (f.message.includes('churn')) return `- High churn file — add tests to catch regressions from frequent changes.`;
+    return `- Review: ${f.message}`;
   });
 
   return {
