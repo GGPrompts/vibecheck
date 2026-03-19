@@ -44,9 +44,23 @@ interface ParsedAuditResponse {
 const EXCLUDE_DIRS = new Set([
   'node_modules', '.next', 'dist', 'build', 'out', '.git',
   'coverage', '.turbo', '.vercel', '__pycache__', '.cache',
+  'vendor', 'target', 'bin', '.cargo', 'venv', '.venv',
 ]);
 
-const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx']);
+const SOURCE_EXTENSIONS = new Set([
+  '.ts', '.tsx', '.js', '.jsx',   // JavaScript/TypeScript
+  '.go',                           // Go
+  '.py',                           // Python
+  '.rs',                           // Rust
+  '.java', '.kt', '.kts',         // JVM
+  '.rb',                           // Ruby
+  '.swift',                        // Swift
+  '.c', '.cpp', '.h', '.hpp',     // C/C++
+  '.cs',                           // C#
+  '.php',                          // PHP
+  '.lua',                          // Lua
+  '.zig',                          // Zig
+]);
 
 function collectSourceFiles(dir: string, files: string[] = []): string[] {
   let entries: import('fs').Dirent[];
