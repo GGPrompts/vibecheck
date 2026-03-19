@@ -27,6 +27,7 @@
     "drizzle-orm": "^0.45.1",
     "gitlog": "^5.1.0",
     "graphology": "^0.26.0",
+    "graphology-communities-louvain": "^2.0.2",
     "graphology-types": "^0.24.8",
     "lucide-react": "^0.577.0",
     "nanoid": "^5.1.7",
