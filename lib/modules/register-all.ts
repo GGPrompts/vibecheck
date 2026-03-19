@@ -14,6 +14,9 @@ import './test-coverage';
 import './compliance';
 import './ast-rules';
 
+// Runtime testing modules (opt-in, starts a dev server)
+import './api-health';
+
 // AI-powered modules (require ANTHROPIC_API_KEY)
 import './naming-quality';
 import './doc-staleness';
