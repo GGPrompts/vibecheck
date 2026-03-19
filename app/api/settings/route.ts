@@ -100,11 +100,23 @@ export async function GET() {
 
     const aiProvider = readEnvValue('VIBECHECK_AI_PROVIDER') as 'api' | 'cli' | undefined;
 
+    // Load model overrides from env
+    let modelOverrides: { global?: string; modules?: Record<string, string> } | undefined;
+    const rawOverrides = readEnvValue('VIBECHECK_MODEL_OVERRIDES');
+    if (rawOverrides) {
+      try {
+        modelOverrides = JSON.parse(rawOverrides);
+      } catch {
+        // Invalid JSON — ignore
+      }
+    }
+
     return NextResponse.json({
       hasApiKey: hasApiKey(),
       enabledModules,
       aiTokenBudget: config?.aiTokenBudget ?? 100000,
       aiProvider: aiProvider ?? 'auto',
+      modelOverrides: modelOverrides ?? null,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -129,12 +141,14 @@ export async function PUT(request: Request) {
       aiTokenBudget,
       weights,
       aiProvider,
+      modelOverrides,
     } = body as {
       apiKey?: string;
       enabledModules?: string[];
       aiTokenBudget?: number;
       weights?: Record<string, number>;
       aiProvider?: 'api' | 'cli' | 'auto';
+      modelOverrides?: { global?: string; modules?: Record<string, string> };
     };
 
     // Handle API key
@@ -150,6 +164,11 @@ export async function PUT(request: Request) {
       } else {
         writeEnvValue('VIBECHECK_AI_PROVIDER', aiProvider);
       }
+    }
+
+    // Handle model overrides
+    if (modelOverrides !== undefined) {
+      writeEnvValue('VIBECHECK_MODEL_OVERRIDES', JSON.stringify(modelOverrides));
     }
 
     // Handle scan config updates

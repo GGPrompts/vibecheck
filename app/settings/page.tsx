@@ -34,11 +34,17 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
+interface ModelOverrides {
+  global?: string;
+  modules?: Record<string, string>;
+}
+
 interface Settings {
   hasApiKey: boolean;
   enabledModules: string[] | null;
   aiTokenBudget: number;
   aiProvider: "api" | "cli" | "auto";
+  modelOverrides?: ModelOverrides | null;
 }
 
 interface Repo {
@@ -75,6 +81,19 @@ const MODULE_LIST = [
     description: "Evaluates commit patterns, branch hygiene, and collaboration metrics.",
   },
 ];
+
+const AI_MODULE_LIST = [
+  { id: "naming-quality", name: "Naming Quality" },
+  { id: "doc-staleness", name: "Doc Staleness" },
+  { id: "arch-smells", name: "Architecture Smells" },
+  { id: "test-quality", name: "Test Quality" },
+];
+
+const TIER_OPTIONS = [
+  { value: "haiku", label: "Haiku", price: "$0.25 / $1.25" },
+  { value: "sonnet", label: "Sonnet", price: "$3.00 / $15.00" },
+  { value: "opus", label: "Opus", price: "$15.00 / $75.00" },
+] as const;
 
 function formatTokenBudget(value: number): string {
   if (value >= 1000) {
@@ -113,6 +132,10 @@ export default function SettingsPage() {
   const [aiProvider, setAiProvider] = useState<"api" | "cli" | "auto">("auto");
   const [cliAvailable, setCliAvailable] = useState<boolean | null>(null);
   const [checkingCli, setCheckingCli] = useState(false);
+
+  // Model tier overrides
+  const [globalTier, setGlobalTier] = useState<string>("sonnet");
+  const [moduleTiers, setModuleTiers] = useState<Record<string, string>>({});
 
   // Add repo dialog
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -155,6 +178,10 @@ export default function SettingsPage() {
       }
       setTokenBudget(data.aiTokenBudget);
       setAiProvider(data.aiProvider ?? "auto");
+      if (data.modelOverrides) {
+        setGlobalTier(data.modelOverrides.global ?? "sonnet");
+        setModuleTiers(data.modelOverrides.modules ?? {});
+      }
     } catch {
       // Silently handle
     } finally {
@@ -210,6 +237,10 @@ export default function SettingsPage() {
           enabledModules,
           aiTokenBudget: tokenBudget,
           aiProvider,
+          modelOverrides: {
+            global: globalTier,
+            modules: moduleTiers,
+          },
         }),
       });
       if (res.ok) {
@@ -448,6 +479,119 @@ export default function SettingsPage() {
               </p>
             </div>
           </button>
+        </CardContent>
+      </Card>
+
+      <Separator />
+
+      {/* Model Tiers */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Model Tiers</CardTitle>
+          <CardDescription>
+            Choose which Claude model tier to use for AI analysis. Prices shown are per million tokens (input / output).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {/* Global tier dropdown */}
+          <div className="space-y-2">
+            <Label htmlFor="global-tier">Global Model Tier</Label>
+            <select
+              id="global-tier"
+              value={globalTier}
+              onChange={(e) => setGlobalTier(e.target.value)}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            >
+              {TIER_OPTIONS.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label} ({t.price})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <Separator />
+
+          {/* Per-module overrides */}
+          <div className="space-y-2">
+            <Label>Per-Module Overrides</Label>
+            <p className="text-xs text-muted-foreground">
+              Override the global tier for individual AI modules. &quot;Use global&quot; inherits the global setting.
+            </p>
+            <div className="space-y-3 mt-2">
+              {AI_MODULE_LIST.map((mod) => (
+                <div
+                  key={mod.id}
+                  className="flex items-center justify-between gap-4"
+                >
+                  <Label className="text-sm font-normal min-w-[140px]">
+                    {mod.name}
+                  </Label>
+                  <select
+                    value={moduleTiers[mod.id] ?? ""}
+                    onChange={(e) => {
+                      setModuleTiers((prev) => {
+                        const next = { ...prev };
+                        if (e.target.value === "") {
+                          delete next[mod.id];
+                        } else {
+                          next[mod.id] = e.target.value;
+                        }
+                        return next;
+                      });
+                    }}
+                    className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  >
+                    <option value="">Use global</option>
+                    {TIER_OPTIONS.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label} ({t.price})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Preset buttons */}
+          <div className="space-y-2">
+            <Label>Presets</Label>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setGlobalTier("haiku");
+                  setModuleTiers({});
+                }}
+              >
+                Budget Mode
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setGlobalTier("sonnet");
+                  setModuleTiers({});
+                }}
+              >
+                Balanced
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setGlobalTier("opus");
+                  setModuleTiers({});
+                }}
+              >
+                Deep Scan
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
