@@ -33,6 +33,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { PROFILES, type ProjectProfile } from "@/lib/config/profiles";
+import { TIERS, type ScanTier } from "@/lib/config/tiers";
 
 interface ModelOverrides {
   global?: string;
@@ -45,6 +47,8 @@ interface Settings {
   aiTokenBudget: number;
   aiProvider: "api" | "cli" | "auto";
   modelOverrides?: ModelOverrides | null;
+  profile?: string;
+  tier?: string;
 }
 
 interface Repo {
@@ -95,6 +99,18 @@ const TIER_OPTIONS = [
   { value: "opus", label: "Opus", price: "$15.00 / $75.00" },
 ] as const;
 
+const PROFILE_OPTIONS = (Object.keys(PROFILES) as ProjectProfile[]).map((key) => ({
+  value: key,
+  label: key.charAt(0).toUpperCase() + key.slice(1),
+  description: PROFILES[key].description,
+}));
+
+const SCAN_TIER_OPTIONS = (Object.keys(TIERS) as ScanTier[]).map((key) => ({
+  value: key,
+  label: key,
+  description: TIERS[key].description,
+}));
+
 function formatTokenBudget(value: number): string {
   if (value >= 1000) {
     return `${Math.round(value / 1000)}K tokens`;
@@ -136,6 +152,10 @@ export default function SettingsPage() {
   // Model tier overrides
   const [globalTier, setGlobalTier] = useState<string>("sonnet");
   const [moduleTiers, setModuleTiers] = useState<Record<string, string>>({});
+
+  // Project profile and scan tier
+  const [projectProfile, setProjectProfile] = useState<string>("team");
+  const [scanTier, setScanTier] = useState<string>("pro");
 
   // Scan directories
   const [scanDirs, setScanDirs] = useState<string[]>([]);
@@ -225,6 +245,8 @@ export default function SettingsPage() {
         setGlobalTier(data.modelOverrides.global ?? "sonnet");
         setModuleTiers(data.modelOverrides.modules ?? {});
       }
+      setProjectProfile(data.profile ?? "team");
+      setScanTier(data.tier ?? "pro");
     } catch {
       // Silently handle
     } finally {
@@ -286,6 +308,8 @@ export default function SettingsPage() {
             global: globalTier,
             modules: moduleTiers,
           },
+          profile: projectProfile,
+          tier: scanTier,
         }),
       });
       if (res.ok) {
@@ -527,6 +551,74 @@ export default function SettingsPage() {
               {savingKey ? "Saving..." : keySaved ? "Saved!" : "Save"}
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      <Separator />
+
+      {/* Project Profile */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Project Profile</CardTitle>
+          <CardDescription>
+            Declare your project type so scoring adjusts automatically.
+            Different profiles disable irrelevant modules and relax or
+            tighten thresholds.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-2">
+            <Label htmlFor="project-profile">Profile</Label>
+            <select
+              id="project-profile"
+              value={projectProfile}
+              onChange={(e) => setProjectProfile(e.target.value)}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            >
+              {PROFILE_OPTIONS.map((p) => (
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {PROFILE_OPTIONS.find((p) => p.value === projectProfile)?.description}
+          </p>
+        </CardContent>
+      </Card>
+
+      <Separator />
+
+      {/* Scan Tier */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Scan Tier</CardTitle>
+          <CardDescription>
+            Controls how thoroughly Vibecheck scans: which models run,
+            parallelism, coverage depth, and whether cross-model
+            verification is enabled.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-2">
+            <Label htmlFor="scan-tier">Tier</Label>
+            <select
+              id="scan-tier"
+              value={scanTier}
+              onChange={(e) => setScanTier(e.target.value)}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            >
+              {SCAN_TIER_OPTIONS.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {SCAN_TIER_OPTIONS.find((t) => t.value === scanTier)?.description}
+          </p>
         </CardContent>
       </Card>
 

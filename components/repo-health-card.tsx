@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Eye, EyeOff } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +8,34 @@ import { Button } from "@/components/ui/button";
 import { ScoreGauge } from "@/components/score-gauge";
 import { ScanProgress } from "@/components/scan-progress";
 import { Badge } from "@/components/ui/badge";
+
+const PROFILE_COLORS: Record<string, string> = {
+  solo: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+  team: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  library: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+  prototype: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
+  enterprise: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+};
+
+// Module-level cache so all cards share one fetch
+let _profileCache: string | null = null;
+let _profilePromise: Promise<string> | null = null;
+
+function fetchGlobalProfile(): Promise<string> {
+  if (_profilePromise) return _profilePromise;
+  _profilePromise = fetch("/api/settings")
+    .then((res) => res.json())
+    .then((data): string => {
+      const p: string = data.profile ?? "team";
+      _profileCache = p;
+      return p;
+    })
+    .catch((): string => {
+      _profileCache = "team";
+      return "team";
+    });
+  return _profilePromise;
+}
 
 interface Repo {
   id: string;
@@ -55,6 +83,15 @@ export function RepoHealthCard({ repo, onScanComplete, onActiveToggle }: RepoHea
   const [scanning, setScanning] = useState(false);
   const [scanId, setScanId] = useState<string | null>(null);
   const [toggling, setToggling] = useState(false);
+  const [profile, setProfile] = useState<string | null>(_profileCache);
+
+  useEffect(() => {
+    if (_profileCache) {
+      setProfile(_profileCache);
+      return;
+    }
+    fetchGlobalProfile().then(setProfile);
+  }, []);
 
   const isEvaluation = repo.mode === "evaluating";
   const isActive = repo.active !== false;
@@ -146,6 +183,15 @@ export function RepoHealthCard({ repo, onScanComplete, onActiveToggle }: RepoHea
           <p className="text-xs text-muted-foreground truncate flex-1" title={repo.path}>
             {repo.path}
           </p>
+          {profile && (
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium shrink-0 ${
+                PROFILE_COLORS[profile] ?? PROFILE_COLORS.team
+              }`}
+            >
+              {profile}
+            </span>
+          )}
           {isEvaluation && (
             <Badge variant="outline" className="text-amber-600 border-amber-500/50 shrink-0">
               Evaluating

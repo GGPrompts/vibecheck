@@ -5,6 +5,7 @@ import { homedir } from 'os';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { scanConfigs } from '@/lib/db/schema';
+import { readSettings, writeSettings } from '@/lib/config/settings';
 
 const VIBECHECK_DIR = join(homedir(), '.vibecheck');
 const ENV_PATH = join(VIBECHECK_DIR, '.env');
@@ -111,12 +112,17 @@ export async function GET() {
       }
     }
 
+    // Load profile and tier from config.json
+    const configSettings = readSettings();
+
     return NextResponse.json({
       hasApiKey: hasApiKey(),
       enabledModules,
       aiTokenBudget: config?.aiTokenBudget ?? 100000,
       aiProvider: aiProvider ?? 'auto',
       modelOverrides: modelOverrides ?? null,
+      profile: configSettings.profile ?? 'team',
+      tier: configSettings.tier ?? 'pro',
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -142,6 +148,8 @@ export async function PUT(request: Request) {
       weights,
       aiProvider,
       modelOverrides,
+      profile,
+      tier,
     } = body as {
       apiKey?: string;
       enabledModules?: string[];
@@ -149,6 +157,8 @@ export async function PUT(request: Request) {
       weights?: Record<string, number>;
       aiProvider?: 'api' | 'cli' | 'auto';
       modelOverrides?: { global?: string; modules?: Record<string, string> };
+      profile?: 'solo' | 'team' | 'library' | 'prototype' | 'enterprise';
+      tier?: 'pro' | 'max' | 'max-x20' | 'api';
     };
 
     // Handle API key
@@ -169,6 +179,14 @@ export async function PUT(request: Request) {
     // Handle model overrides
     if (modelOverrides !== undefined) {
       writeEnvValue('VIBECHECK_MODEL_OVERRIDES', JSON.stringify(modelOverrides));
+    }
+
+    // Handle profile and tier (stored in config.json)
+    if (profile !== undefined || tier !== undefined) {
+      const current = readSettings();
+      if (profile !== undefined) current.profile = profile;
+      if (tier !== undefined) current.tier = tier;
+      writeSettings(current);
     }
 
     // Handle scan config updates

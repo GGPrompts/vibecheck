@@ -9,6 +9,7 @@ export interface Settings {
   scanDirs?: string[];
   auditPrompts?: Record<string, string>;
   tier?: 'pro' | 'max' | 'max-x20' | 'api';
+  profile?: 'solo' | 'team' | 'library' | 'prototype' | 'enterprise';
 }
 
 /**
@@ -47,6 +48,10 @@ export function readSettings(): Settings {
     const validTiers = ['pro', 'max', 'max-x20', 'api'] as const;
     if (typeof parsed.tier === 'string' && (validTiers as readonly string[]).includes(parsed.tier)) {
       result.tier = parsed.tier as Settings['tier'];
+    }
+    const validProfiles = ['solo', 'team', 'library', 'prototype', 'enterprise'] as const;
+    if (typeof parsed.profile === 'string' && (validProfiles as readonly string[]).includes(parsed.profile)) {
+      result.profile = parsed.profile as Settings['profile'];
     }
     return result;
   } catch {
