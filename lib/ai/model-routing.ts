@@ -1,17 +1,16 @@
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { CLAUDE_PRICING } from './pricing';
 
 /**
  * Available model tiers.
  */
-export type ModelTier = 'haiku' | 'sonnet' | 'opus';
+type ModelTier = 'haiku' | 'sonnet' | 'opus';
 
 /**
  * Maps tier names to actual Claude model IDs.
  */
-export const MODEL_IDS: Record<ModelTier, string> = {
+const MODEL_IDS: Record<ModelTier, string> = {
   haiku: 'claude-haiku-4-5-20251001',
   sonnet: 'claude-sonnet-4-6',
   opus: 'claude-opus-4-6',
@@ -20,7 +19,7 @@ export const MODEL_IDS: Record<ModelTier, string> = {
 /**
  * Overrides structure for model selection.
  */
-export interface ModelOverrides {
+interface ModelOverrides {
   global?: string;
   modules?: Record<string, string>;
 }
@@ -43,7 +42,7 @@ const DEFAULT_MODEL = 'claude-sonnet-4-6';
 /**
  * Load model overrides from the ~/.vibecheck/.env file.
  */
-export function loadModelOverrides(): ModelOverrides | undefined {
+function loadModelOverrides(): ModelOverrides | undefined {
   try {
     const envPath = join(homedir(), '.vibecheck', '.env');
     if (!existsSync(envPath)) return undefined;
@@ -96,59 +95,3 @@ export function getModelForModule(
   return MODULE_MODEL_MAP[moduleId] ?? DEFAULT_MODEL;
 }
 
-/**
- * Returns available model tiers with display names and pricing info for the settings UI.
- */
-export function getAvailableTiers(): Array<{
-  tier: ModelTier;
-  name: string;
-  inputCost: string;
-  outputCost: string;
-}> {
-  return [
-    {
-      tier: 'haiku',
-      name: 'Haiku',
-      inputCost: `$${CLAUDE_PRICING.haiku.input.toFixed(2)}`,
-      outputCost: `$${CLAUDE_PRICING.haiku.output.toFixed(2)}`,
-    },
-    {
-      tier: 'sonnet',
-      name: 'Sonnet',
-      inputCost: `$${CLAUDE_PRICING.sonnet.input.toFixed(2)}`,
-      outputCost: `$${CLAUDE_PRICING.sonnet.output.toFixed(2)}`,
-    },
-    {
-      tier: 'opus',
-      name: 'Opus',
-      inputCost: `$${CLAUDE_PRICING.opus.input.toFixed(2)}`,
-      outputCost: `$${CLAUDE_PRICING.opus.output.toFixed(2)}`,
-    },
-  ];
-}
-
-/**
- * Per-million-token pricing (USD) for cost estimation.
- * Updated to reflect current Anthropic pricing.
- */
-export const MODEL_COSTS: Record<string, { input: number; output: number }> = {
-  'claude-sonnet-4-6': { input: 3, output: 15 },
-  'claude-opus-4-6': { input: 15, output: 75 },
-  'claude-haiku-3-5': { input: 0.8, output: 4 },
-};
-
-/**
- * Estimate cost in USD for a given model and token counts.
- */
-export function estimateCost(
-  modelId: string,
-  inputTokens: number,
-  outputTokens: number
-): number {
-  const costs = MODEL_COSTS[modelId];
-  if (!costs) return 0;
-  return (
-    (inputTokens / 1_000_000) * costs.input +
-    (outputTokens / 1_000_000) * costs.output
-  );
-}

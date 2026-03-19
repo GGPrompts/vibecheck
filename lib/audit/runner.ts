@@ -18,13 +18,13 @@ import { getTierConfig, type ScanTier, type TierConfig } from '@/lib/config/tier
 // Types
 // ---------------------------------------------------------------------------
 
-export interface AuditOptions {
+interface AuditOptions {
   provider: 'claude-api' | 'claude-cli' | 'codex';
   modules?: string[];
   signal?: AbortSignal;
 }
 
-export interface AuditFinding {
+interface AuditFinding {
   severity: string;
   file: string;
   line?: number;

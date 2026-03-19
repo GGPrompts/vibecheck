@@ -7,7 +7,7 @@
  * anchoring bias.
  */
 
-export interface AuditPromptTemplate {
+interface AuditPromptTemplate {
   moduleId: string;
   name: string;
   systemPrompt: string;
@@ -43,7 +43,7 @@ function formatFileBlock(files: Array<{ path: string; content: string }>): strin
 // Module prompt templates
 // ---------------------------------------------------------------------------
 
-export const complexityPrompt: AuditPromptTemplate = {
+const complexityPrompt: AuditPromptTemplate = {
   moduleId: 'complexity',
   name: 'Complexity Audit',
   systemPrompt: `You are a senior software engineer performing a code complexity audit. Identify functions, classes, or modules that are excessively complex, deeply nested, or difficult to understand. Focus on cyclomatic complexity, cognitive complexity, long functions, and tangled control flow. ${JSON_OUTPUT_INSTRUCTIONS}`,
@@ -52,7 +52,7 @@ export const complexityPrompt: AuditPromptTemplate = {
   },
 };
 
-export const securityPrompt: AuditPromptTemplate = {
+const securityPrompt: AuditPromptTemplate = {
   moduleId: 'security',
   name: 'Security Audit',
   systemPrompt: `You are a security engineer performing a source code security audit. Identify vulnerabilities, insecure patterns, and potential attack vectors. Focus on injection flaws, authentication issues, hardcoded secrets, insecure defaults, and missing input validation. ${JSON_OUTPUT_INSTRUCTIONS}`,
@@ -61,7 +61,7 @@ export const securityPrompt: AuditPromptTemplate = {
   },
 };
 
-export const dependenciesPrompt: AuditPromptTemplate = {
+const dependenciesPrompt: AuditPromptTemplate = {
   moduleId: 'dependencies',
   name: 'Dependencies Audit',
   systemPrompt: `You are a software engineer auditing dependency usage and management. Identify problematic dependency patterns: unused imports, heavy dependencies that could be replaced with lighter alternatives, version pinning issues, and circular dependency risks. ${JSON_OUTPUT_INSTRUCTIONS}`,
@@ -70,7 +70,7 @@ export const dependenciesPrompt: AuditPromptTemplate = {
   },
 };
 
-export const architecturePrompt: AuditPromptTemplate = {
+const architecturePrompt: AuditPromptTemplate = {
   moduleId: 'architecture',
   name: 'Architecture Audit',
   systemPrompt: `You are a senior architect reviewing code for structural and design issues. Identify architectural smells: god objects, feature envy, inappropriate intimacy between modules, layer violations, missing abstractions, and inconsistent patterns. ${JSON_OUTPUT_INSTRUCTIONS}`,
@@ -79,7 +79,7 @@ export const architecturePrompt: AuditPromptTemplate = {
   },
 };
 
-export const testQualityPrompt: AuditPromptTemplate = {
+const testQualityPrompt: AuditPromptTemplate = {
   moduleId: 'test-quality',
   name: 'Test Quality Audit',
   systemPrompt: `You are a QA engineer auditing test code quality. Identify weak test patterns: missing edge case coverage, brittle assertions, tests that test implementation details rather than behavior, missing error path tests, and test code that is harder to maintain than the code it tests. ${JSON_OUTPUT_INSTRUCTIONS}`,
@@ -88,7 +88,7 @@ export const testQualityPrompt: AuditPromptTemplate = {
   },
 };
 
-export const namingPrompt: AuditPromptTemplate = {
+const namingPrompt: AuditPromptTemplate = {
   moduleId: 'naming-quality',
   name: 'Naming Quality Audit',
   systemPrompt: `You are a senior developer auditing code for naming and readability issues. Identify unclear variable names, misleading function names, inconsistent naming conventions, overly abbreviated identifiers, and names that don't convey intent. ${JSON_OUTPUT_INSTRUCTIONS}`,
@@ -97,7 +97,7 @@ export const namingPrompt: AuditPromptTemplate = {
   },
 };
 
-export const deadCodePrompt: AuditPromptTemplate = {
+const deadCodePrompt: AuditPromptTemplate = {
   moduleId: 'dead-code',
   name: 'Dead Code Audit',
   systemPrompt: `You are a software engineer auditing for dead and unreachable code. Identify unused functions, unreachable branches, commented-out code blocks, unused variables, obsolete feature flags, and code that appears to serve no current purpose. ${JSON_OUTPUT_INSTRUCTIONS}`,
@@ -106,7 +106,7 @@ export const deadCodePrompt: AuditPromptTemplate = {
   },
 };
 
-export const docStalenessPrompt: AuditPromptTemplate = {
+const docStalenessPrompt: AuditPromptTemplate = {
   moduleId: 'doc-staleness',
   name: 'Documentation Staleness Audit',
   systemPrompt: `You are a technical writer auditing code documentation quality. Identify stale comments that contradict the code, missing JSDoc on public APIs, misleading docstrings, TODO comments that should be tracked as issues, and documentation that describes a different behavior than the code implements. ${JSON_OUTPUT_INSTRUCTIONS}`,

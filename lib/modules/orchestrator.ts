@@ -19,7 +19,7 @@ export interface ScanProgress {
   message: string;
 }
 
-export class ScanEventEmitter extends EventEmitter {
+class ScanEventEmitter extends EventEmitter {
   emitProgress(progress: ScanProgress): void {
     this.emit('progress', progress);
   }

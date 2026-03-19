@@ -29,7 +29,7 @@ function contextLine(f: PrioritizedFinding): string {
   return parts.join(' | ');
 }
 
-export function complexityTemplate(findings: PrioritizedFinding[]): PromptSection {
+function complexityTemplate(findings: PrioritizedFinding[]): PromptSection {
   const filePath = findings[0].filePath;
   const details = findings.map((f) => `- ${locationString(f)}: ${f.message}`);
   const actions = findings.map((f) => {
@@ -46,7 +46,7 @@ export function complexityTemplate(findings: PrioritizedFinding[]): PromptSectio
   };
 }
 
-export function securityTemplate(findings: PrioritizedFinding[]): PromptSection {
+function securityTemplate(findings: PrioritizedFinding[]): PromptSection {
   const filePath = findings[0].filePath;
   const details = findings.map((f) => `- ${locationString(f)}: ${f.message}`);
   const actions = findings.map((f) => {
@@ -63,7 +63,7 @@ export function securityTemplate(findings: PrioritizedFinding[]): PromptSection 
   };
 }
 
-export function dependencyTemplate(findings: PrioritizedFinding[]): PromptSection {
+function dependencyTemplate(findings: PrioritizedFinding[]): PromptSection {
   const filePath = findings[0].filePath;
   const details = findings.map((f) => `- ${f.message}`);
   const actions: string[] = [];
@@ -89,7 +89,7 @@ export function dependencyTemplate(findings: PrioritizedFinding[]): PromptSectio
   };
 }
 
-export function gitHealthTemplate(findings: PrioritizedFinding[]): PromptSection {
+function gitHealthTemplate(findings: PrioritizedFinding[]): PromptSection {
   const filePath = findings[0].filePath;
   const details = findings.map((f) => `- ${locationString(f)}: ${f.message}`);
   const actions: string[] = [];
@@ -121,7 +121,7 @@ export function gitHealthTemplate(findings: PrioritizedFinding[]): PromptSection
   };
 }
 
-export function deadCodeTemplate(findings: PrioritizedFinding[]): PromptSection {
+function deadCodeTemplate(findings: PrioritizedFinding[]): PromptSection {
   const filePath = findings[0].filePath;
   const details = findings.map((f) => `- ${locationString(f)}: ${f.message}`);
   const actions = findings.map((f) => {
@@ -138,7 +138,7 @@ export function deadCodeTemplate(findings: PrioritizedFinding[]): PromptSection 
   };
 }
 
-export function genericTemplate(findings: PrioritizedFinding[]): PromptSection {
+function genericTemplate(findings: PrioritizedFinding[]): PromptSection {
   const filePath = findings[0].filePath;
   const details = findings.map((f) => `- ${locationString(f)}: ${f.message}`);
   const actions = findings.map((f) => {
