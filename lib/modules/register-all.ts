@@ -22,3 +22,17 @@ import './naming-quality';
 import './doc-staleness';
 import './arch-smells';
 import './test-quality';
+
+// Go-native modules (require Go toolchain)
+import './go-security';
+import './go-dependencies';
+import './go-complexity';
+import './go-dead-code';
+import './go-test-coverage';
+
+// Rust-native modules (require Rust toolchain)
+import './rust-security';
+import './rust-dependencies';
+import './rust-complexity';
+import './rust-dead-code';
+import './rust-test-coverage';
