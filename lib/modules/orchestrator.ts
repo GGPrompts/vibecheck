@@ -3,9 +3,10 @@ import { nanoid } from 'nanoid';
 import { eq, and, desc, ne } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { scans, moduleResults, findings as findingsTable } from '@/lib/db/schema';
-import { getEnabledModules } from './registry';
+import { getEnabledModules, getAllModules } from './registry';
 import { computeOverallScore } from './scoring';
 import type { ModuleResult } from './types';
+import type { RegisteredModule } from './types';
 
 export interface ScanProgress {
   scanId: string;
@@ -336,4 +337,69 @@ async function reconcileFindingStatuses(
       }
     }
   }
+}
+
+/**
+ * Run a fast scan using only static modules (skip AI modules).
+ * Does NOT write to the database — designed for post-commit hooks.
+ * Enforces a 30-second timeout per module.
+ *
+ * @returns scores per module and the overall weighted score.
+ */
+export async function runFastScan(
+  repoPath: string
+): Promise<{ scores: Record<string, number>; overall: number }> {
+  const allModules = getAllModules();
+  const staticModules: RegisteredModule[] = allModules.filter(
+    (m) => m.definition.category === 'static'
+  );
+
+  const scores: Record<string, number> = {};
+  const resultSummaries: Array<{
+    moduleId: string;
+    score: number;
+    confidence: number;
+  }> = [];
+
+  const TIMEOUT_MS = 30_000;
+
+  for (const mod of staticModules) {
+    const { definition, runner } = mod;
+
+    try {
+      const canRun = await runner.canRun(repoPath);
+      if (!canRun) continue;
+
+      // Race the module against a timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+      const result: ModuleResult = await Promise.race([
+        runner.run(repoPath, {
+          signal: controller.signal,
+          onProgress: () => {},
+        }),
+        new Promise<never>((_, reject) => {
+          controller.signal.addEventListener('abort', () =>
+            reject(new Error(`Module ${definition.id} timed out after 30s`))
+          );
+        }),
+      ]);
+
+      clearTimeout(timeoutId);
+
+      scores[definition.id] = result.score;
+      resultSummaries.push({
+        moduleId: definition.id,
+        score: result.score,
+        confidence: result.confidence,
+      });
+    } catch {
+      // Skip modules that fail or timeout — don't block
+      continue;
+    }
+  }
+
+  const overall = computeOverallScore(resultSummaries);
+  return { scores, overall };
 }
