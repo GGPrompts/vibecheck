@@ -27,7 +27,7 @@ export interface CloneResult {
  *   - github.com/owner/repo
  *   - owner/repo
  */
-function parseGitHubRepo(input: string): { owner: string; repo: string } {
+export function parseGitHubRepo(input: string): { owner: string; repo: string } {
   const cleaned = input.trim().replace(/\.git$/, '').replace(/\/$/, '');
 
   // Full URL: https://github.com/owner/repo
