@@ -6,6 +6,7 @@ import { scans, moduleResults, findings as findingsTable } from '@/lib/db/schema
 import { getEnabledModules, getAllModules } from './registry';
 import { computeOverallScore } from './scoring';
 import { readVibecheckRc, mergeWithRc } from '@/lib/config/vibecheckrc';
+import { getProfileConfig } from '@/lib/config/profiles';
 import type { ModuleResult } from './types';
 import type { RegisteredModule } from './types';
 
@@ -54,6 +55,12 @@ export async function runScan(
   // Read per-repo .vibecheckrc and merge with incoming config
   const rc = readVibecheckRc(repoPath);
   if (rc) {
+    // Apply profile as a base layer — explicit rc.modules/thresholds override profile defaults
+    if (rc.profile) {
+      const profileCfg = getProfileConfig(rc.profile);
+      rc.modules = { ...profileCfg.modules, ...rc.modules };
+      rc.thresholds = { ...profileCfg.thresholds, ...rc.thresholds };
+    }
     config = mergeWithRc(config, rc);
   }
 

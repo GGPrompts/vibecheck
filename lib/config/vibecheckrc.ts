@@ -34,6 +34,9 @@ const vibecheckRcSchema = z.object({
 
   /** Scan tier — controls model selection, parallelism, and coverage depth. */
   tier: z.enum(['pro', 'max', 'max-x20', 'api']).optional(),
+
+  /** Project profile — adjusts scoring, module selection, and thresholds for the project type. */
+  profile: z.enum(['solo', 'team', 'library', 'prototype', 'enterprise']).optional(),
 });
 
 export type VibecheckRc = z.infer<typeof vibecheckRcSchema>;
