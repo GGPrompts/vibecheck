@@ -3,9 +3,11 @@
 interface ScoreGaugeProps {
   score: number | null;
   size?: number;
+  /** When true, colors are inverted: high score = red (risky), low score = green (safe) */
+  invertColors?: boolean;
 }
 
-export function ScoreGauge({ score, size = 80 }: ScoreGaugeProps) {
+export function ScoreGauge({ score, size = 80, invertColors = false }: ScoreGaugeProps) {
   const strokeWidth = 6;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -15,12 +17,26 @@ export function ScoreGauge({ score, size = 80 }: ScoreGaugeProps) {
   let dashOffset = circumference; // fully empty
 
   if (score !== null) {
-    if (score > 70) {
-      color = "#22c55e";
-    } else if (score >= 40) {
-      color = "#eab308";
+    if (invertColors) {
+      // Inverted: high = bad (red), low = good (green)
+      if (score < 30) {
+        color = "#22c55e"; // green - low risk
+      } else if (score < 60) {
+        color = "#eab308"; // yellow - moderate risk
+      } else if (score < 80) {
+        color = "#ef4444"; // red - high risk
+      } else {
+        color = "#991b1b"; // dark red - avoid
+      }
     } else {
-      color = "#ef4444";
+      // Normal: high = good (green), low = bad (red)
+      if (score > 70) {
+        color = "#22c55e";
+      } else if (score >= 40) {
+        color = "#eab308";
+      } else {
+        color = "#ef4444";
+      }
     }
     dashOffset = circumference - (score / 100) * circumference;
   }

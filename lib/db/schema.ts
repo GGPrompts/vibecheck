@@ -8,6 +8,8 @@ export const repos = sqliteTable('repos', {
   name: text('name').notNull(),
   overallScore: integer('overall_score'),
   lastScanAt: text('last_scan_at'),
+  /** JSON metadata field. Stores optional fields like { mode: 'maintaining' | 'evaluating' } */
+  metadata: text('metadata'),
 });
 
 export const scans = sqliteTable('scans', {

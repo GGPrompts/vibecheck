@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +21,7 @@ interface Repo {
   id: string;
   name: string;
   path: string;
+  mode: "maintaining" | "evaluating";
   latestScan: {
     id: string;
     status: string;
@@ -33,6 +35,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newRepoPath, setNewRepoPath] = useState("");
+  const [isEvaluation, setIsEvaluation] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
@@ -63,7 +66,10 @@ export default function DashboardPage() {
       const res = await fetch("/api/repos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: newRepoPath.trim() }),
+        body: JSON.stringify({
+          path: newRepoPath.trim(),
+          mode: isEvaluation ? "evaluating" : "maintaining",
+        }),
       });
       const data = await res.json();
 
@@ -74,6 +80,7 @@ export default function DashboardPage() {
       }
 
       setNewRepoPath("");
+      setIsEvaluation(false);
       setDialogOpen(false);
       fetchRepos();
     } catch {
@@ -108,17 +115,34 @@ export default function DashboardPage() {
                 Enter the absolute path to a local repository.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-2">
-              <Label htmlFor="repo-path">Repository Path</Label>
-              <Input
-                id="repo-path"
-                placeholder="/home/user/projects/my-repo"
-                value={newRepoPath}
-                onChange={(e) => setNewRepoPath(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleAddRepo();
-                }}
-              />
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="repo-path">Repository Path</Label>
+                <Input
+                  id="repo-path"
+                  placeholder="/home/user/projects/my-repo"
+                  value={newRepoPath}
+                  onChange={(e) => setNewRepoPath(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleAddRepo();
+                  }}
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <Switch
+                  id="eval-mode"
+                  checked={isEvaluation}
+                  onCheckedChange={setIsEvaluation}
+                />
+                <Label htmlFor="eval-mode" className="cursor-pointer">
+                  {isEvaluation ? "Evaluating (external repo)" : "Maintaining (your repo)"}
+                </Label>
+              </div>
+              {isEvaluation && (
+                <p className="text-xs text-muted-foreground">
+                  Evaluation mode assesses this repo for adoption risk instead of maintenance health.
+                </p>
+              )}
               {addError && (
                 <p className="text-xs text-destructive">{addError}</p>
               )}

@@ -22,8 +22,20 @@ export async function GET() {
         .limit(1)
         .get();
 
+      // Parse mode from metadata JSON field
+      let mode: 'maintaining' | 'evaluating' = 'maintaining';
+      if (repo.metadata) {
+        try {
+          const meta = JSON.parse(repo.metadata);
+          if (meta.mode === 'evaluating') mode = 'evaluating';
+        } catch {
+          // Ignore invalid JSON in metadata
+        }
+      }
+
       return {
         ...repo,
+        mode,
         latestScan: latestScan
           ? {
               id: latestScan.id,
@@ -44,16 +56,26 @@ export async function GET() {
 
 /**
  * POST /api/repos — Add a repo by path.
- * Body: { path: string }
+ * Body: { path: string, mode?: 'maintaining' | 'evaluating' }
  */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { path: repoPath } = body as { path: string };
+    const { path: repoPath, mode } = body as {
+      path: string;
+      mode?: 'maintaining' | 'evaluating';
+    };
 
     if (!repoPath || typeof repoPath !== 'string') {
       return NextResponse.json(
         { error: 'path is required and must be a string' },
+        { status: 400 }
+      );
+    }
+
+    if (mode && mode !== 'maintaining' && mode !== 'evaluating') {
+      return NextResponse.json(
+        { error: 'mode must be "maintaining" or "evaluating"' },
         { status: 400 }
       );
     }
@@ -80,8 +102,9 @@ export async function POST(request: Request) {
     }
 
     const id = nanoid();
+    const metadata = JSON.stringify({ mode: mode ?? 'maintaining' });
     db.insert(repos)
-      .values({ id, path: repoPath, name })
+      .values({ id, path: repoPath, name, metadata })
       .run();
 
     const created = db.select().from(repos).where(eq(repos.id, id)).get();

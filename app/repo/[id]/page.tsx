@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
 import {
   Sheet,
   SheetTrigger,
@@ -20,12 +21,13 @@ import { ScanProgress } from '@/components/scan-progress';
 import { ModuleScoreCard } from '@/components/module-score-card';
 import { HotspotQuadrant } from '@/components/hotspot-quadrant';
 import { RadarChart } from '@/components/radar-chart';
-import { Loader2, Play, Sparkles } from 'lucide-react';
+import { Loader2, Play, Sparkles, ShieldAlert, ClipboardCopy, Check } from 'lucide-react';
 
 interface RepoData {
   id: string;
   name: string;
   path: string;
+  mode?: 'maintaining' | 'evaluating';
   latestScan: {
     id: string;
     status: string;
@@ -67,6 +69,14 @@ interface ScanDetail {
   modules: ScanModule[];
 }
 
+type EvaluationVerdict = 'low-risk' | 'moderate-risk' | 'high-risk' | 'avoid';
+
+interface EvaluationResult {
+  adoptionRisk: number;
+  verdict: EvaluationVerdict;
+  reasons: string[];
+}
+
 function formatDuration(ms: number | null | undefined): string {
   if (!ms) return '--';
   const seconds = Math.floor(ms / 1000);
@@ -74,6 +84,244 @@ function formatDuration(ms: number | null | undefined): string {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
   return `${minutes}m ${remainingSeconds}s`;
+}
+
+/**
+ * Client-side evaluation score computation.
+ * Mirrors the server-side logic in evaluation-scorer.ts.
+ */
+function computeClientEvaluation(modules: ScanModule[]): EvaluationResult {
+  const reasons: string[] = [];
+
+  // Check for critical security findings (hard stop)
+  const criticalSecurityFindings = modules.flatMap((m) =>
+    m.findings.filter(
+      (f) => f.severity === 'critical' && (f.category === 'security' || m.moduleId === 'security'),
+    ),
+  );
+
+  if (criticalSecurityFindings.length > 0) {
+    return {
+      adoptionRisk: 100,
+      verdict: 'avoid',
+      reasons: [
+        `BLOCKING: ${criticalSecurityFindings.length} critical security issue${criticalSecurityFindings.length > 1 ? 's' : ''} found -- must be resolved before adoption`,
+      ],
+    };
+  }
+
+  // Evaluation weights
+  const EVAL_WEIGHTS: Record<string, number> = {
+    dependencies: 2,
+    dependency: 2,
+    security: 1.5,
+    'git-health': 1.5,
+    'git_health': 1.5,
+    'bus-factor': 1.5,
+    'bus_factor': 1.5,
+    complexity: 1,
+    'code-quality': 1,
+    'code_quality': 1,
+  };
+
+  let totalWeight = 0;
+  let weightedSum = 0;
+
+  for (const mod of modules) {
+    const baseWeight = EVAL_WEIGHTS[mod.moduleId] ?? 1;
+    const effectiveWeight = baseWeight * mod.confidence;
+    weightedSum += mod.score * effectiveWeight;
+    totalWeight += effectiveWeight;
+  }
+
+  const healthScore = totalWeight > 0 ? weightedSum / totalWeight : 50;
+  let risk = 100 - healthScore;
+
+  // Check for high-severity security findings
+  const highSecurityFindings = modules.flatMap((m) =>
+    m.findings.filter(
+      (f) => f.severity === 'high' && (f.category === 'security' || m.moduleId === 'security'),
+    ),
+  );
+  if (highSecurityFindings.length > 0) {
+    reasons.push(
+      `${highSecurityFindings.length} high-severity security issue${highSecurityFindings.length > 1 ? 's' : ''} found`,
+    );
+    risk = Math.min(100, risk + highSecurityFindings.length * 3);
+  }
+
+  // Check dependency modules for severely outdated deps
+  const depModules = modules.filter(
+    (m) => m.moduleId === 'dependencies' || m.moduleId === 'dependency',
+  );
+  for (const dm of depModules) {
+    const critFindings = dm.findings.filter(
+      (f) => f.severity === 'high' || f.severity === 'critical',
+    );
+    if (critFindings.length > 0) {
+      reasons.push(
+        `${critFindings.length} dependency update${critFindings.length > 1 ? 's' : ''} needed (high/critical)`,
+      );
+      risk = Math.min(100, risk + 5);
+    }
+  }
+
+  // Check bus factor / git health
+  const gitModules = modules.filter(
+    (m) =>
+      m.moduleId === 'git-health' ||
+      m.moduleId === 'git_health' ||
+      m.moduleId === 'bus-factor' ||
+      m.moduleId === 'bus_factor',
+  );
+  for (const gm of gitModules) {
+    if (gm.score < 40) {
+      reasons.push('Git health score is low -- potential bus factor or maintenance risk');
+      risk = Math.min(100, risk + 8);
+    }
+  }
+
+  // Default reason
+  if (reasons.length === 0) {
+    if (risk < 30) {
+      reasons.push('No major adoption concerns identified');
+    } else if (risk < 60) {
+      reasons.push('Some module scores are below healthy thresholds');
+    } else {
+      reasons.push(
+        'Multiple modules scored poorly -- adoption would require significant effort',
+      );
+    }
+  }
+
+  const finalRisk = Math.round(Math.max(0, Math.min(100, risk)));
+
+  let verdict: EvaluationVerdict;
+  if (finalRisk < 30) verdict = 'low-risk';
+  else if (finalRisk < 60) verdict = 'moderate-risk';
+  else if (finalRisk < 80) verdict = 'high-risk';
+  else verdict = 'avoid';
+
+  return { adoptionRisk: finalRisk, verdict, reasons };
+}
+
+function VerdictBadge({ verdict }: { verdict: EvaluationVerdict }) {
+  const config: Record<EvaluationVerdict, { label: string; className: string }> = {
+    'low-risk': {
+      label: 'Low Risk',
+      className: 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700',
+    },
+    'moderate-risk': {
+      label: 'Moderate Risk',
+      className: 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-700',
+    },
+    'high-risk': {
+      label: 'High Risk',
+      className: 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700',
+    },
+    avoid: {
+      label: 'Avoid',
+      className: 'bg-red-200 text-red-900 border-red-500 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800',
+    },
+  };
+
+  const c = config[verdict];
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold ${c.className}`}
+    >
+      {c.label}
+    </span>
+  );
+}
+
+function EvaluationPromptOutput({ scanId }: { scanId: string }) {
+  const [prompt, setPrompt] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [copied, setCopied] = React.useState(false);
+
+  const handleGenerate = async () => {
+    setLoading(true);
+    setError(null);
+    setCopied(false);
+
+    try {
+      const res = await fetch(`/api/scans/${scanId}/evaluation-prompt`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error ?? 'Failed to generate evaluation report');
+        return;
+      }
+
+      setPrompt(data.prompt);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Network error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCopy = async () => {
+    if (!prompt) return;
+
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      const textArea = document.createElement('textarea');
+      textArea.value = prompt;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Button onClick={handleGenerate} disabled={loading} variant="default">
+          {loading ? (
+            <Loader2 className="size-4 animate-spin" data-icon="inline-start" />
+          ) : (
+            <ShieldAlert className="size-4" data-icon="inline-start" />
+          )}
+          {loading ? 'Generating...' : 'Generate Evaluation Report'}
+        </Button>
+
+        {prompt && (
+          <Button onClick={handleCopy} variant="outline" size="sm">
+            {copied ? (
+              <Check className="size-4" data-icon="inline-start" />
+            ) : (
+              <ClipboardCopy className="size-4" data-icon="inline-start" />
+            )}
+            {copied ? 'Copied!' : 'Copy to Clipboard'}
+          </Button>
+        )}
+      </div>
+
+      {error && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {prompt && (
+        <div className="relative rounded-lg border bg-muted/30 p-4">
+          <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-sm leading-relaxed text-foreground">
+            {prompt}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function RepoPage() {
@@ -86,6 +334,8 @@ export default function RepoPage() {
   const [scanLoading, setScanLoading] = React.useState(false);
   const [activeScanId, setActiveScanId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+
+  const isEvaluation = repo?.mode === 'evaluating';
 
   const fetchData = React.useCallback(async () => {
     try {
@@ -200,6 +450,10 @@ export default function RepoPage() {
     scanDetail?.modules.filter((m) => m.score > 60).length ?? 0;
   const totalModules = scanDetail?.modules.length ?? 0;
 
+  // Compute evaluation result if in evaluation mode
+  const evaluationResult: EvaluationResult | null =
+    isEvaluation && scanDetail ? computeClientEvaluation(scanDetail.modules) : null;
+
   // Build hotspot data from complexity metrics if available
   const hotspotData: {
     fileName: string;
@@ -232,17 +486,47 @@ export default function RepoPage() {
     }
   }
 
+  // Identify blocking issues for evaluation mode
+  const blockingFindings = isEvaluation
+    ? allFindings.filter(
+        (f) =>
+          f.severity === 'critical' ||
+          (f.category === 'security' && f.severity === 'high'),
+      )
+    : [];
+
+  // Score display for evaluation mode
+  const displayScore = isEvaluation
+    ? evaluationResult?.adoptionRisk ?? null
+    : scanDetail?.scan.overallScore ?? repo.latestScan?.overallScore ?? null;
+
   return (
     <div className="space-y-8">
       {/* Summary Row */}
       <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-6">
           <ScoreGauge
-            score={scanDetail?.scan.overallScore ?? repo.latestScan?.overallScore ?? null}
+            score={displayScore}
             size={120}
+            invertColors={isEvaluation}
           />
           <div className="space-y-2">
-            <h1 className="text-3xl font-bold tracking-tight">{repo.name}</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-bold tracking-tight">{repo.name}</h1>
+              {isEvaluation && (
+                <Badge variant="outline" className="text-amber-600 border-amber-500/50">
+                  Evaluation Mode
+                </Badge>
+              )}
+            </div>
+            {isEvaluation && evaluationResult && (
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-muted-foreground">
+                  Adoption Risk: {evaluationResult.adoptionRisk}%
+                </span>
+                <VerdictBadge verdict={evaluationResult.verdict} />
+              </div>
+            )}
             <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
               <span>
                 <strong className="text-foreground">{allFindings.length}</strong>{' '}
@@ -271,10 +555,16 @@ export default function RepoPage() {
           <Button onClick={handleScanNow} disabled={scanLoading || !!activeScanId}>
             {scanLoading ? (
               <Loader2 className="size-4 animate-spin" data-icon="inline-start" />
+            ) : isEvaluation ? (
+              <ShieldAlert className="size-4" data-icon="inline-start" />
             ) : (
               <Play className="size-4" data-icon="inline-start" />
             )}
-            {scanLoading ? 'Starting...' : 'Scan Now'}
+            {scanLoading
+              ? 'Starting...'
+              : isEvaluation
+                ? 'Evaluate'
+                : 'Scan Now'}
           </Button>
 
           {scanDetail && (
@@ -282,20 +572,34 @@ export default function RepoPage() {
               <SheetTrigger
                 render={
                   <Button variant="outline">
-                    <Sparkles className="size-4" data-icon="inline-start" />
-                    Generate Claude Prompt
+                    {isEvaluation ? (
+                      <ShieldAlert className="size-4" data-icon="inline-start" />
+                    ) : (
+                      <Sparkles className="size-4" data-icon="inline-start" />
+                    )}
+                    {isEvaluation
+                      ? 'Generate Evaluation Report'
+                      : 'Generate Claude Prompt'}
                   </Button>
                 }
               />
               <SheetContent side="right" className="sm:max-w-xl overflow-y-auto">
                 <SheetHeader>
-                  <SheetTitle>Claude Prompt</SheetTitle>
+                  <SheetTitle>
+                    {isEvaluation ? 'Evaluation Report' : 'Claude Prompt'}
+                  </SheetTitle>
                   <SheetDescription>
-                    Generate a prompt with scan findings for Claude to help fix issues.
+                    {isEvaluation
+                      ? 'Generate an adoption evaluation report with risk assessment and effort estimates.'
+                      : 'Generate a prompt with scan findings for Claude to help fix issues.'}
                   </SheetDescription>
                 </SheetHeader>
                 <div className="px-4 pb-4">
-                  <PromptOutput scanId={scanDetail.scan.id} />
+                  {isEvaluation ? (
+                    <EvaluationPromptOutput scanId={scanDetail.scan.id} />
+                  ) : (
+                    <PromptOutput scanId={scanDetail.scan.id} />
+                  )}
                 </div>
               </SheetContent>
             </Sheet>
@@ -303,11 +607,62 @@ export default function RepoPage() {
         </div>
       </div>
 
+      {/* Evaluation: Reasons & Blocking Issues */}
+      {isEvaluation && evaluationResult && (
+        <section className="space-y-4">
+          <h2 className="text-xl font-semibold">Adoption Assessment</h2>
+          <Card className="border-dashed border-2 border-amber-500/40">
+            <CardContent className="pt-4 space-y-4">
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  Risk Factors
+                </h3>
+                <ul className="space-y-1">
+                  {evaluationResult.reasons.map((reason, i) => (
+                    <li key={i} className="text-sm flex items-start gap-2">
+                      <span
+                        className={`mt-1.5 inline-block h-2 w-2 rounded-full shrink-0 ${
+                          reason.startsWith('BLOCKING')
+                            ? 'bg-red-500'
+                            : 'bg-amber-500'
+                        }`}
+                      />
+                      {reason}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              {blockingFindings.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-red-600 uppercase tracking-wide">
+                    Blocking Issues ({blockingFindings.length})
+                  </h3>
+                  <ul className="space-y-1">
+                    {blockingFindings.slice(0, 10).map((f) => (
+                      <li key={f.id} className="text-sm text-red-600">
+                        [{f.severity}] {f.filePath}: {f.message}
+                      </li>
+                    ))}
+                    {blockingFindings.length > 10 && (
+                      <li className="text-sm text-muted-foreground">
+                        ...and {blockingFindings.length - 10} more
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+      )}
+
       {/* Active Scan Progress */}
       {activeScanId && (
         <Card>
           <CardHeader>
-            <CardTitle>Scan in Progress</CardTitle>
+            <CardTitle>
+              {isEvaluation ? 'Evaluation in Progress' : 'Scan in Progress'}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <ScanProgress scanId={activeScanId} onComplete={handleScanComplete} />
@@ -389,15 +744,19 @@ export default function RepoPage() {
         <Card>
           <CardContent className="py-12 text-center">
             <p className="text-muted-foreground mb-4">
-              No scan results yet. Run your first scan to see health metrics.
+              {isEvaluation
+                ? 'No evaluation results yet. Run your first evaluation to see adoption risk metrics.'
+                : 'No scan results yet. Run your first scan to see health metrics.'}
             </p>
             <Button onClick={handleScanNow} disabled={scanLoading}>
               {scanLoading ? (
                 <Loader2 className="size-4 animate-spin" data-icon="inline-start" />
+              ) : isEvaluation ? (
+                <ShieldAlert className="size-4" data-icon="inline-start" />
               ) : (
                 <Play className="size-4" data-icon="inline-start" />
               )}
-              Run First Scan
+              {isEvaluation ? 'Run First Evaluation' : 'Run First Scan'}
             </Button>
           </CardContent>
         </Card>

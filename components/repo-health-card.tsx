@@ -6,11 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScoreGauge } from "@/components/score-gauge";
 import { ScanProgress } from "@/components/scan-progress";
+import { Badge } from "@/components/ui/badge";
 
 interface Repo {
   id: string;
   name: string;
   path: string;
+  mode?: "maintaining" | "evaluating";
   latestScan: {
     id: string;
     status: string;
@@ -50,6 +52,8 @@ export function RepoHealthCard({ repo, onScanComplete }: RepoHealthCardProps) {
   const [scanning, setScanning] = useState(false);
   const [scanId, setScanId] = useState<string | null>(null);
 
+  const isEvaluation = repo.mode === "evaluating";
+
   async function handleScan() {
     setScanning(true);
     try {
@@ -75,18 +79,45 @@ export function RepoHealthCard({ repo, onScanComplete }: RepoHealthCardProps) {
     onScanComplete?.();
   }
 
+  // For evaluation repos, invert score display (high score = risky)
+  const displayScore = isEvaluation && repo.latestScan?.overallScore != null
+    ? 100 - repo.latestScan.overallScore
+    : repo.latestScan?.overallScore ?? null;
+
   return (
-    <Card>
+    <Card
+      className={
+        isEvaluation
+          ? "border-dashed border-2 border-amber-500/40 bg-amber-50/5"
+          : undefined
+      }
+    >
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <span className="truncate font-bold">{repo.name}</span>
-          <ScoreGauge score={repo.latestScan?.overallScore ?? null} size={56} />
+          <ScoreGauge
+            score={displayScore}
+            size={56}
+            invertColors={isEvaluation}
+          />
         </CardTitle>
-        <p className="text-xs text-muted-foreground truncate" title={repo.path}>
-          {repo.path}
-        </p>
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-muted-foreground truncate flex-1" title={repo.path}>
+            {repo.path}
+          </p>
+          {isEvaluation && (
+            <Badge variant="outline" className="text-amber-600 border-amber-500/50 shrink-0">
+              Evaluating
+            </Badge>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        {isEvaluation && repo.latestScan?.overallScore != null && (
+          <p className="text-xs font-medium text-amber-600">
+            Adoption Risk: {displayScore}%
+          </p>
+        )}
         {scanning && scanId ? (
           <ScanProgress scanId={scanId} onComplete={handleScanComplete} />
         ) : (
@@ -101,7 +132,9 @@ export function RepoHealthCard({ repo, onScanComplete }: RepoHealthCardProps) {
             onClick={handleScan}
             disabled={scanning}
           >
-            {scanning ? "Scanning..." : "Scan"}
+            {scanning
+              ? isEvaluation ? "Evaluating..." : "Scanning..."
+              : isEvaluation ? "Evaluate" : "Scan"}
           </Button>
           <Button variant="ghost" size="sm" render={<Link href={`/repo/${repo.id}`} />}>
             View
