@@ -9,3 +9,9 @@ import './git-health';
 import './dead-code';
 import './circular-deps';
 import './test-coverage';
+
+// AI-powered modules (require ANTHROPIC_API_KEY)
+import './naming-quality';
+import './doc-staleness';
+import './arch-smells';
+import './test-quality';
