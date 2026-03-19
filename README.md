@@ -1,36 +1,125 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Vibecheck
 
-## Getting Started
+Codebase health scanner with AI-powered audits and a living architecture visualizer. Scans your code for complexity, dead code, security issues, architectural smells, and more — then renders an interactive dependency graph colored by health.
 
-First, run the development server:
+## Features
+
+**14 Analysis Modules**
+- Static: security vulnerabilities, outdated deps, complexity, dead code, circular deps, test coverage, compliance rules, custom AST patterns
+- Runtime: live API endpoint testing (crashes, missing validation, slow responses)
+- AI-powered: naming quality, documentation staleness, architectural smells, test quality (via Claude)
+
+**Architecture Visualizer**
+- Interactive force-directed dependency graph (Sigma.js + WebGL)
+- Nodes colored red/yellow/green by health score
+- Louvain community detection for automatic feature area clustering
+- Blast radius mode — click a file, see everything that depends on it
+- Layer violation detection (UI importing from Data, etc.)
+- Time slider — scrub through scan history and watch health evolve
+- Filter by health, architectural layer, or text search
+
+**Project Profiles**
+- Solo, Team, Library, Prototype, Enterprise presets
+- Auto-adjust scoring thresholds and module enables per project type
+
+**Scan Tiers**
+- Pro (Haiku, sampled), Max (Sonnet, full), Max x20 (Sonnet + Opus verify), API (token-budgeted)
+
+**Cross-Model Audits**
+- Run the same audit with Claude API, Claude CLI, and Codex
+- Compare findings across models
+
+## Quick Start
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# Scan a repo (opens browser dashboard)
+npx vibecheck /path/to/your/project
+
+# Headless — generate a Claude prompt from findings
+npx vibecheck /path/to/your/project --prompt
+
+# Headless — JSON output with pass/fail threshold
+npx vibecheck /path/to/your/project --json --threshold 70
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Dashboard
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The web UI shows:
+- **Dashboard** — all registered repos with health scores and profile badges
+- **Repo Detail** — findings table, module scores, hotspot quadrant, trend charts
+- **Architecture Map** — interactive codebase graph with health overlay
+- **Scan Comparison** — side-by-side score deltas between scans
+- **Trends** — score history over time, finding status evolution
+- **AI Audit** — per-module AI analysis results with cross-model comparison
+- **Settings** — profile/tier selection, AI provider config, module toggles
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## MCP Integration
 
-## Learn More
+Use vibecheck as an MCP tool server in Claude Code:
 
-To learn more about Next.js, take a look at the following resources:
+```json
+{
+  "mcpServers": {
+    "vibecheck": {
+      "command": "npx",
+      "args": ["tsx", "./mcp-server/index.ts"]
+    }
+  }
+}
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Tools: `vibecheck_scan`, `vibecheck_health`, `vibecheck_prompt`, `vibecheck_findings`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Configuration
 
-## Deploy on Vercel
+### Per-repo: `.vibecheckrc`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```json
+{
+  "profile": "solo",
+  "tier": "max",
+  "modules": { "git-health": false },
+  "thresholds": { "complexity": 80 },
+  "ignore": ["generated/**"],
+  "classify": { "lib/sdk/index.ts": "public-api" },
+  "aiTokenBudget": 50000
+}
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Global: `~/.vibecheck/config.json`
+
+```json
+{
+  "scanDirs": ["/home/user/projects"],
+  "tier": "max",
+  "profile": "team"
+}
+```
+
+## Supported Languages
+
+Static modules are JS/TS-focused (complexity, dead-code, circular-deps). AI audits and file scanning support: TypeScript, JavaScript, Go, Python, Rust, Java, Kotlin, Ruby, Swift, C/C++, C#, PHP, Lua, Zig.
+
+## Tech Stack
+
+- Next.js 16, React 19, TypeScript 5
+- SQLite via drizzle-orm + better-sqlite3
+- Sigma.js 3 + graphology (WebGL graph visualization)
+- Anthropic SDK (Claude API/CLI/Codex)
+- Tailwind CSS 4, shadcn/ui
+- ts-morph, knip, dependency-cruiser, ast-grep, gitlog
+
+## Development
+
+```bash
+npm install
+npm run dev          # Start dev server on :3000
+npm run build        # Production build
+npm run db:generate  # Generate drizzle migrations
+npm run db:migrate   # Apply migrations
+npm run db:studio    # Open drizzle studio
+```
+
+## License
+
+MIT
