@@ -3,6 +3,15 @@
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import { ClipboardCopy, Sparkles, Loader2, Check } from 'lucide-react';
+import { estimateTokens } from '@/lib/prompt-generator/token-estimator';
+import { estimatePromptCost, formatCost } from '@/lib/ai/pricing';
+
+function formatTokenCount(tokens: number): string {
+  if (tokens >= 1000) {
+    return `~${(tokens / 1000).toFixed(1)}K`;
+  }
+  return `~${tokens}`;
+}
 
 interface PromptOutputProps {
   scanId: string;
@@ -56,6 +65,13 @@ export function PromptOutput({ scanId }: PromptOutputProps) {
     }
   };
 
+  const costEstimate = React.useMemo(() => {
+    if (!prompt) return null;
+    const tokens = estimateTokens(prompt);
+    const costs = estimatePromptCost(tokens);
+    return { tokens, costs };
+  }, [prompt]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
@@ -92,6 +108,15 @@ export function PromptOutput({ scanId }: PromptOutputProps) {
             {prompt}
           </pre>
         </div>
+      )}
+
+      {prompt && costEstimate && (
+        <p className="text-xs text-muted-foreground">
+          {formatTokenCount(costEstimate.tokens)} tokens{' '}
+          &middot; Haiku {formatCost(costEstimate.costs.haiku)}{' '}
+          &middot; Sonnet {formatCost(costEstimate.costs.sonnet)}{' '}
+          &middot; Opus {formatCost(costEstimate.costs.opus)}
+        </p>
       )}
     </div>
   );

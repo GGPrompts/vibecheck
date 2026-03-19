@@ -14,16 +14,22 @@ import {
   type EnrichedFinding,
 } from './prioritizer';
 import { selectTemplate, formatSection } from './templates';
+import { estimateTokens } from './token-estimator';
 import type { Severity } from '@/lib/modules/types';
 
 const MAX_FINDING_GROUPS = 10;
 
+export interface GeneratePromptResult {
+  prompt: string;
+  estimated_tokens: number;
+}
+
 /**
  * Generate a Claude Code prompt from a completed scan's findings.
  * Loads data from DB, prioritizes, groups by file, applies templates,
- * stores the generated prompt, and returns the text.
+ * stores the generated prompt, and returns the text with token estimate.
  */
-export async function generatePrompt(scanId: string): Promise<string> {
+export async function generatePrompt(scanId: string): Promise<GeneratePromptResult> {
   // Load the scan
   const scan = db.select().from(scans).where(eq(scans.id, scanId)).get();
   if (!scan) {
@@ -81,6 +87,7 @@ export async function generatePrompt(scanId: string): Promise<string> {
 
   if (enrichedFindings.length === 0) {
     const prompt = `Based on vibecheck scan of ${repoName} at ${scan.createdAt}:\n\nNo actionable findings detected. Your codebase looks healthy!\n`;
+    const estimated_tokens = estimateTokens(prompt);
 
     db.insert(prompts)
       .values({
@@ -91,7 +98,7 @@ export async function generatePrompt(scanId: string): Promise<string> {
       })
       .run();
 
-    return prompt;
+    return { prompt, estimated_tokens };
   }
 
   // Prioritize and group
@@ -127,6 +134,7 @@ export async function generatePrompt(scanId: string): Promise<string> {
   );
 
   const promptText = sections.join('\n');
+  const estimated_tokens = estimateTokens(promptText);
 
   // Collect finding IDs included in the prompt
   const includedIds = topGroups.flatMap((g) => g.findings.map((f) => f.id));
@@ -141,5 +149,5 @@ export async function generatePrompt(scanId: string): Promise<string> {
     })
     .run();
 
-  return promptText;
+  return { prompt: promptText, estimated_tokens };
 }

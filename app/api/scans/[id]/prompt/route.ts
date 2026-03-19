@@ -11,8 +11,11 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const prompt = await generatePrompt(id);
-    return NextResponse.json({ prompt });
+    const result = await generatePrompt(id);
+    return NextResponse.json({
+      prompt: result.prompt,
+      estimated_tokens: result.estimated_tokens,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const status = message.includes('not found') ? 404 : 400;
@@ -30,8 +33,11 @@ export async function POST(
   try {
     const { id } = await params;
     // Options could include maxGroups, filterSeverity, etc. in the future
-    const prompt = await generatePrompt(id);
-    return NextResponse.json({ prompt });
+    const result = await generatePrompt(id);
+    return NextResponse.json({
+      prompt: result.prompt,
+      estimated_tokens: result.estimated_tokens,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const status = message.includes('not found') ? 404 : 400;
