@@ -38,8 +38,8 @@ export function BlastRadiusMode({
   const originalColorsRef = React.useRef<Map<string, { color: string; size: number }>>(new Map());
   const highlightAppliedRef = React.useRef(false);
 
-  // Save original colors on first render
-  React.useEffect(() => {
+  // Snapshot current graph colors (called before applying highlights)
+  const snapshotColors = React.useCallback(() => {
     const graph = sigma.getGraph();
     if (graph.order === 0) return;
 
@@ -52,6 +52,11 @@ export function BlastRadiusMode({
     });
     originalColorsRef.current = colors;
   }, [sigma]);
+
+  // Save original colors on first render
+  React.useEffect(() => {
+    snapshotColors();
+  }, [snapshotColors]);
 
   // Compute affected files via BFS on the sigma graph
   const computeAffectedFiles = React.useCallback(
@@ -94,6 +99,9 @@ export function BlastRadiusMode({
     if (graph.order === 0) return;
 
     if (active && selectedNode) {
+      // Re-snapshot current colors before applying highlights
+      // so we capture any changes from the time slider
+      snapshotColors();
       const affected = computeAffectedFiles(selectedNode);
 
       graph.forEachNode((node) => {
@@ -154,7 +162,7 @@ export function BlastRadiusMode({
 
       highlightAppliedRef.current = false;
     }
-  }, [active, selectedNode, sigma, computeAffectedFiles]);
+  }, [active, selectedNode, sigma, computeAffectedFiles, snapshotColors]);
 
   // Count for display
   const affectedCount = React.useMemo(() => {

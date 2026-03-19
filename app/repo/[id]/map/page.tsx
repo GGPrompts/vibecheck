@@ -173,6 +173,7 @@ export default function MapPage() {
               serializedGraph={graphData}
               healthMap={healthMap}
               architecture={architecture}
+              repoId={id}
             />
           </React.Suspense>
         )}

@@ -76,11 +76,28 @@ export async function POST(request: Request) {
 }
 
 /**
- * GET /api/scans — List recent scans across all repos.
- * Returns up to 20 scans ordered by createdAt desc, with repo name.
+ * GET /api/scans — List recent scans across all repos (or filtered by repoId).
+ * Query params:
+ *   - repoId: filter scans to a specific repo
+ *   - status: filter by scan status (e.g. "completed")
+ * Returns up to 50 scans ordered by createdAt desc, with repo name.
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const url = new URL(request.url);
+    const repoIdFilter = url.searchParams.get('repoId');
+    const statusFilter = url.searchParams.get('status');
+
+    const conditions = [];
+    if (repoIdFilter) {
+      conditions.push(eq(scans.repoId, repoIdFilter));
+    }
+    if (statusFilter) {
+      conditions.push(eq(scans.status, statusFilter));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
     const recentScans = db
       .select({
         id: scans.id,
@@ -93,8 +110,9 @@ export async function GET() {
       })
       .from(scans)
       .leftJoin(repos, eq(scans.repoId, repos.id))
+      .where(whereClause)
       .orderBy(desc(scans.createdAt))
-      .limit(20)
+      .limit(50)
       .all();
 
     return NextResponse.json(recentScans);

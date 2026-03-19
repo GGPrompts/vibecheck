@@ -51,7 +51,8 @@ export function FilterPanel({
   const [collapsed, setCollapsed] = React.useState(false);
   const originalColorsRef = React.useRef<Map<string, { color: string; size: number }>>(new Map());
 
-  // Snapshot original node attributes on mount
+  // Snapshot original node attributes on mount and when healthMap changes
+  // (e.g. when the time slider scrubs to a different scan)
   React.useEffect(() => {
     const graph = sigma.getGraph();
     if (graph.order === 0) return;
@@ -64,7 +65,7 @@ export function FilterPanel({
       });
     });
     originalColorsRef.current = colors;
-  }, [sigma]);
+  }, [sigma, healthMap]);
 
   // Determine if a node matches the current filters
   const nodeMatchesFilters = React.useCallback(

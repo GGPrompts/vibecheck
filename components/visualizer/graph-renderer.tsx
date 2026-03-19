@@ -10,6 +10,7 @@ import { GraphControls } from './graph-controls';
 import { FileSidebar, type SelectedNodeData } from './file-sidebar';
 import { BlastRadiusMode } from './blast-radius-mode';
 import { FilterPanel, type FilterState } from './filter-panel';
+import { TimeSlider } from './time-slider';
 import type { FileHealthMap } from '@/lib/visualizer/file-health';
 import type { ArchitectureAnalysis, ArchLayer } from '@/lib/visualizer/architecture';
 
@@ -23,7 +24,7 @@ import type { ArchitectureAnalysis, ArchLayer } from '@/lib/visualizer/architect
  *   40-70: yellow (#eab308) -> green (#22c55e)
  *   70-100: green stays (#22c55e)
  */
-function healthToColor(score: number): string {
+export function healthToColor(score: number): string {
   const clamped = Math.max(0, Math.min(100, score));
 
   if (clamped <= 40) {
@@ -49,7 +50,7 @@ function healthToColor(score: number): string {
 }
 
 // Default color for nodes with no health data
-const DEFAULT_NODE_COLOR = '#6366f1'; // indigo-500
+export const DEFAULT_NODE_COLOR = '#6366f1'; // indigo-500
 
 // ---------------------------------------------------------------------------
 // Event handler component (must live inside SigmaContainer)
@@ -239,12 +240,14 @@ interface GraphRendererProps {
   serializedGraph: SerializedGraph;
   healthMap: FileHealthMap;
   architecture: ArchitectureAnalysis | null;
+  repoId?: string;
 }
 
 export function GraphRenderer({
   serializedGraph,
   healthMap,
   architecture,
+  repoId,
 }: GraphRendererProps) {
   const nodeCount = serializedGraph.nodes.length;
   const edgeCount = serializedGraph.edges.length;
@@ -257,6 +260,22 @@ export function GraphRenderer({
     layers: new Set(),
     searchQuery: '',
   });
+
+  // Active health map — starts as the prop, changes when time slider scrubs
+  const [activeHealthMap, setActiveHealthMap] = React.useState<FileHealthMap>(healthMap);
+
+  // Keep activeHealthMap in sync if the prop changes (e.g. on refresh)
+  React.useEffect(() => {
+    setActiveHealthMap(healthMap);
+  }, [healthMap]);
+
+  // Time slider callback: update active health map
+  const handleTimeHealthChange = React.useCallback(
+    (newHealthMap: FileHealthMap, _scanId: string | null, _overallScore: number | null) => {
+      setActiveHealthMap(newHealthMap);
+    },
+    [],
+  );
 
   const handleNodeClick = React.useCallback((data: SelectedNodeData) => {
     setSelectedNode(data);
@@ -314,7 +333,7 @@ export function GraphRenderer({
           architecture={architecture}
         />
         <GraphEvents
-          healthMap={healthMap}
+          healthMap={activeHealthMap}
           architecture={architecture}
           onNodeClick={handleNodeClick}
           onStageClick={handleStageClick}
@@ -328,11 +347,18 @@ export function GraphRenderer({
           />
         </GraphControls>
         <FilterPanel
-          healthMap={healthMap}
+          healthMap={activeHealthMap}
           architecture={architecture}
           filters={filters}
           onFiltersChange={setFilters}
         />
+        {repoId && (
+          <TimeSlider
+            repoId={repoId}
+            currentHealthMap={healthMap}
+            onHealthMapChange={handleTimeHealthChange}
+          />
+        )}
       </SigmaContainer>
 
       {/* File sidebar renders outside SigmaContainer to overlay the canvas */}
