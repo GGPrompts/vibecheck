@@ -4,11 +4,14 @@ import * as React from 'react';
 import Graph from 'graphology';
 import type { SerializedGraph } from 'graphology-types';
 import forceAtlas2 from 'graphology-layout-forceatlas2';
-import { SigmaContainer, useLoadGraph, useSigma } from '@react-sigma/core';
+import { SigmaContainer, useLoadGraph, useSigma, useRegisterEvents } from '@react-sigma/core';
 import '@react-sigma/core/lib/style.css';
 import { GraphControls } from './graph-controls';
+import { FileSidebar, type SelectedNodeData } from './file-sidebar';
+import { BlastRadiusMode } from './blast-radius-mode';
+import { FilterPanel, type FilterState } from './filter-panel';
 import type { FileHealthMap } from '@/lib/visualizer/file-health';
-import type { ArchitectureAnalysis } from '@/lib/visualizer/architecture';
+import type { ArchitectureAnalysis, ArchLayer } from '@/lib/visualizer/architecture';
 
 // ---------------------------------------------------------------------------
 // Health -> color helper
@@ -47,6 +50,57 @@ function healthToColor(score: number): string {
 
 // Default color for nodes with no health data
 const DEFAULT_NODE_COLOR = '#6366f1'; // indigo-500
+
+// ---------------------------------------------------------------------------
+// Event handler component (must live inside SigmaContainer)
+// ---------------------------------------------------------------------------
+
+interface GraphEventsProps {
+  healthMap: FileHealthMap;
+  architecture: ArchitectureAnalysis | null;
+  onNodeClick: (data: SelectedNodeData) => void;
+  onStageClick: () => void;
+}
+
+function GraphEvents({ healthMap, architecture, onNodeClick, onStageClick }: GraphEventsProps) {
+  const sigma = useSigma();
+  const registerEvents = useRegisterEvents();
+
+  React.useEffect(() => {
+    registerEvents({
+      clickNode: (event) => {
+        const node = event.node;
+        const graph = sigma.getGraph();
+        if (!graph.hasNode(node)) return;
+
+        const attrs = graph.getNodeAttributes(node);
+        const fileHealth = healthMap[node] ?? null;
+        const layer: ArchLayer | null = architecture?.layers?.[node] ?? null;
+        const blastRadius =
+          architecture?.blastRadius?.find((b) => b.file === node) ?? null;
+
+        const fanIn = graph.inDegree(node);
+        const fanOut = graph.outDegree(node);
+        const loc = (attrs.loc as number) ?? 0;
+
+        onNodeClick({
+          filePath: node,
+          health: fileHealth,
+          loc,
+          fanIn,
+          fanOut,
+          layer,
+          blastRadius,
+        });
+      },
+      clickStage: () => {
+        onStageClick();
+      },
+    });
+  }, [sigma, registerEvents, healthMap, architecture, onNodeClick, onStageClick]);
+
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Inner component that loads the graph into Sigma
@@ -195,6 +249,40 @@ export function GraphRenderer({
   const nodeCount = serializedGraph.nodes.length;
   const edgeCount = serializedGraph.edges.length;
 
+  // Interactive state
+  const [selectedNode, setSelectedNode] = React.useState<SelectedNodeData | null>(null);
+  const [blastRadiusActive, setBlastRadiusActive] = React.useState(false);
+  const [filters, setFilters] = React.useState<FilterState>({
+    healthColors: new Set(),
+    layers: new Set(),
+    searchQuery: '',
+  });
+
+  const handleNodeClick = React.useCallback((data: SelectedNodeData) => {
+    setSelectedNode(data);
+  }, []);
+
+  const handleStageClick = React.useCallback(() => {
+    // Only dismiss sidebar if blast radius mode is off
+    if (!blastRadiusActive) {
+      setSelectedNode(null);
+    }
+  }, [blastRadiusActive]);
+
+  const handleSidebarClose = React.useCallback(() => {
+    setSelectedNode(null);
+  }, []);
+
+  const handleBlastRadiusToggle = React.useCallback(() => {
+    setBlastRadiusActive((prev) => {
+      if (prev) {
+        // Turning off — also clear selection
+        setSelectedNode(null);
+      }
+      return !prev;
+    });
+  }, []);
+
   if (nodeCount === 0) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
@@ -225,8 +313,30 @@ export function GraphRenderer({
           healthMap={healthMap}
           architecture={architecture}
         />
-        <GraphControls nodeCount={nodeCount} edgeCount={edgeCount} />
+        <GraphEvents
+          healthMap={healthMap}
+          architecture={architecture}
+          onNodeClick={handleNodeClick}
+          onStageClick={handleStageClick}
+        />
+        <GraphControls nodeCount={nodeCount} edgeCount={edgeCount}>
+          <BlastRadiusMode
+            active={blastRadiusActive}
+            onToggle={handleBlastRadiusToggle}
+            selectedNode={selectedNode?.filePath ?? null}
+            architecture={architecture}
+          />
+        </GraphControls>
+        <FilterPanel
+          healthMap={healthMap}
+          architecture={architecture}
+          filters={filters}
+          onFiltersChange={setFilters}
+        />
       </SigmaContainer>
+
+      {/* File sidebar renders outside SigmaContainer to overlay the canvas */}
+      <FileSidebar node={selectedNode} onClose={handleSidebarClose} />
     </div>
   );
 }

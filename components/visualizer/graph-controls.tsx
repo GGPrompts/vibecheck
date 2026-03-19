@@ -8,9 +8,10 @@ import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 interface GraphControlsProps {
   nodeCount: number;
   edgeCount: number;
+  children?: React.ReactNode;
 }
 
-export function GraphControls({ nodeCount, edgeCount }: GraphControlsProps) {
+export function GraphControls({ nodeCount, edgeCount, children }: GraphControlsProps) {
   const { zoomIn, zoomOut, reset } = useCamera();
 
   return (
@@ -45,6 +46,13 @@ export function GraphControls({ nodeCount, edgeCount }: GraphControlsProps) {
           <Maximize2 className="size-4" />
         </Button>
       </div>
+
+      {/* Additional controls slot (e.g. blast radius toggle) */}
+      {children && (
+        <div className="bg-background/80 backdrop-blur-sm rounded-lg border border-border p-1.5 shadow-md">
+          {children}
+        </div>
+      )}
 
       {/* Stats & Legend */}
       <div className="bg-background/80 backdrop-blur-sm rounded-lg border border-border p-3 shadow-md space-y-3 min-w-[140px]">
