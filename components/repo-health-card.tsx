@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, ExternalLink } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScoreGauge } from "@/components/score-gauge";
@@ -43,6 +43,7 @@ interface Repo {
   path: string;
   active?: boolean;
   mode?: "maintaining" | "evaluating";
+  metadata?: string | null;
   latestScan: {
     id: string;
     status: string;
@@ -95,6 +96,15 @@ export function RepoHealthCard({ repo, onScanComplete, onActiveToggle }: RepoHea
 
   const isEvaluation = repo.mode === "evaluating";
   const isActive = repo.active !== false;
+
+  // Parse GitHub URL from metadata if present
+  let githubUrl: string | null = null;
+  if (repo.metadata) {
+    try {
+      const meta = JSON.parse(repo.metadata);
+      if (meta.github) githubUrl = meta.github;
+    } catch { /* ignore */ }
+  }
 
   async function handleScan() {
     setScanning(true);
@@ -180,9 +190,22 @@ export function RepoHealthCard({ repo, onScanComplete, onActiveToggle }: RepoHea
           </div>
         </CardTitle>
         <div className="flex items-center gap-2">
-          <p className="text-xs text-muted-foreground truncate flex-1" title={repo.path}>
-            {repo.path}
-          </p>
+          {githubUrl ? (
+            <a
+              href={githubUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-muted-foreground hover:text-foreground truncate flex-1 flex items-center gap-1"
+              title={githubUrl}
+            >
+              {githubUrl.replace("https://github.com/", "")}
+              <ExternalLink className="h-3 w-3 shrink-0" />
+            </a>
+          ) : (
+            <p className="text-xs text-muted-foreground truncate flex-1" title={repo.path}>
+              {repo.path}
+            </p>
+          )}
           {profile && (
             <span
               className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium shrink-0 ${
