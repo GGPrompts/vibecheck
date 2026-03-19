@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join, extname } from 'path';
 import { nanoid } from 'nanoid';
-import { getClient, isAiAvailable } from '@/lib/ai/client';
+import { getProvider } from '@/lib/ai/client';
 import { getModelForModule } from '@/lib/ai/model-routing';
 import { createTokenTracker } from '@/lib/ai/token-tracker';
 import {
@@ -68,15 +68,16 @@ function collectTestFiles(dir: string, files: string[] = []): string[] {
 
 const runner: ModuleRunner = {
   async canRun(repoPath: string): Promise<boolean> {
-    if (!isAiAvailable()) return false;
+    const provider = await getProvider();
+    if (!(await provider.isAvailable())) return false;
     // Check if repo has any test files
     const testFiles = collectTestFiles(repoPath);
     return testFiles.length > 0;
   },
 
   async run(repoPath: string, opts: RunOptions): Promise<ModuleResult> {
-    const client = getClient();
-    if (!client) {
+    const provider = await getProvider();
+    if (!(await provider.isAvailable())) {
       return {
         score: -1,
         confidence: 0,
@@ -150,17 +151,17 @@ const runner: ModuleRunner = {
       const userPrompt = buildTestQualityPrompt(input);
 
       try {
-        const response = await client.messages.create({
+        const response = await provider.query(userPrompt, {
           model: getModelForModule(MODULE_ID),
-          max_tokens: 4096,
+          maxTokens: 4096,
           system: TEST_QUALITY_SYSTEM,
-          messages: [{ role: 'user', content: userPrompt }],
         });
 
-        tracker.track(response.usage.input_tokens, response.usage.output_tokens);
+        if (provider.tracksCost && response.inputTokens != null && response.outputTokens != null) {
+          tracker.track(response.inputTokens, response.outputTokens);
+        }
 
-        const text =
-          response.content.find((c) => c.type === 'text')?.text ?? '';
+        const text = response.text;
         const jsonMatch = text.match(/\{[\s\S]*\}/);
         const parsed = jsonMatch
           ? JSON.parse(jsonMatch[0])

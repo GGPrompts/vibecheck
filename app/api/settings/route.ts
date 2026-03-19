@@ -25,6 +25,45 @@ function hasApiKey(): boolean {
   }
 }
 
+function readEnvValue(key: string): string | undefined {
+  try {
+    if (!existsSync(ENV_PATH)) return undefined;
+    const content = readFileSync(ENV_PATH, 'utf-8');
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('#') || !trimmed.includes('=')) continue;
+      const eqIndex = trimmed.indexOf('=');
+      const k = trimmed.slice(0, eqIndex).trim();
+      const v = trimmed.slice(eqIndex + 1).trim().replace(/^["']|["']$/g, '');
+      if (k === key) return v;
+    }
+  } catch {
+    // File doesn't exist or isn't readable
+  }
+  return undefined;
+}
+
+function writeEnvValue(key: string, value: string): void {
+  mkdirSync(VIBECHECK_DIR, { recursive: true });
+
+  let content = '';
+  if (existsSync(ENV_PATH)) {
+    content = readFileSync(ENV_PATH, 'utf-8');
+    const lines = content.split('\n');
+    const idx = lines.findIndex((l) => l.trim().startsWith(`${key}=`));
+    if (idx >= 0) {
+      lines[idx] = `${key}=${value}`;
+      content = lines.join('\n');
+    } else {
+      content = content.trimEnd() + `\n${key}=${value}\n`;
+    }
+  } else {
+    content = `${key}=${value}\n`;
+  }
+
+  writeFileSync(ENV_PATH, content, 'utf-8');
+}
+
 function writeApiKey(key: string): void {
   mkdirSync(VIBECHECK_DIR, { recursive: true });
 
@@ -59,10 +98,13 @@ export async function GET() {
       ? JSON.parse(config.enabledModules)
       : null;
 
+    const aiProvider = readEnvValue('VIBECHECK_AI_PROVIDER') as 'api' | 'cli' | undefined;
+
     return NextResponse.json({
       hasApiKey: hasApiKey(),
       enabledModules,
       aiTokenBudget: config?.aiTokenBudget ?? 100000,
+      aiProvider: aiProvider ?? 'auto',
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -86,16 +128,28 @@ export async function PUT(request: Request) {
       enabledModules,
       aiTokenBudget,
       weights,
+      aiProvider,
     } = body as {
       apiKey?: string;
       enabledModules?: string[];
       aiTokenBudget?: number;
       weights?: Record<string, number>;
+      aiProvider?: 'api' | 'cli' | 'auto';
     };
 
     // Handle API key
     if (apiKey && typeof apiKey === 'string') {
       writeApiKey(apiKey);
+    }
+
+    // Handle AI provider selection
+    if (aiProvider !== undefined) {
+      if (aiProvider === 'auto') {
+        // Remove the env value so auto-detection is used
+        writeEnvValue('VIBECHECK_AI_PROVIDER', '');
+      } else {
+        writeEnvValue('VIBECHECK_AI_PROVIDER', aiProvider);
+      }
     }
 
     // Handle scan config updates

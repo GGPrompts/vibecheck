@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Eye, EyeOff, Plus, Trash2 } from "lucide-react";
+import { Eye, EyeOff, Plus, Trash2, Check, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +38,7 @@ interface Settings {
   hasApiKey: boolean;
   enabledModules: string[] | null;
   aiTokenBudget: number;
+  aiProvider: "api" | "cli" | "auto";
 }
 
 interface Repo {
@@ -87,6 +88,7 @@ export default function SettingsPage() {
     hasApiKey: false,
     enabledModules: null,
     aiTokenBudget: 100000,
+    aiProvider: "auto",
   });
   const [repos, setRepos] = useState<Repo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -107,6 +109,11 @@ export default function SettingsPage() {
   // Token budget
   const [tokenBudget, setTokenBudget] = useState(100000);
 
+  // AI provider
+  const [aiProvider, setAiProvider] = useState<"api" | "cli" | "auto">("auto");
+  const [cliAvailable, setCliAvailable] = useState<boolean | null>(null);
+  const [checkingCli, setCheckingCli] = useState(false);
+
   // Add repo dialog
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newRepoPath, setNewRepoPath] = useState("");
@@ -125,6 +132,19 @@ export default function SettingsPage() {
     }
   }, []);
 
+  const checkCliAvailability = useCallback(async () => {
+    setCheckingCli(true);
+    try {
+      const res = await fetch("/api/ai-provider/check");
+      const data = await res.json();
+      setCliAvailable(data.cliAvailable ?? false);
+    } catch {
+      setCliAvailable(false);
+    } finally {
+      setCheckingCli(false);
+    }
+  }, []);
+
   const fetchSettings = useCallback(async () => {
     try {
       const res = await fetch("/api/settings");
@@ -134,6 +154,7 @@ export default function SettingsPage() {
         setEnabledModules(data.enabledModules);
       }
       setTokenBudget(data.aiTokenBudget);
+      setAiProvider(data.aiProvider ?? "auto");
     } catch {
       // Silently handle
     } finally {
@@ -144,7 +165,8 @@ export default function SettingsPage() {
   useEffect(() => {
     fetchSettings();
     fetchRepos();
-  }, [fetchSettings, fetchRepos]);
+    checkCliAvailability();
+  }, [fetchSettings, fetchRepos, checkCliAvailability]);
 
   async function handleSaveApiKey() {
     if (!apiKey.trim()) return;
@@ -187,6 +209,7 @@ export default function SettingsPage() {
         body: JSON.stringify({
           enabledModules,
           aiTokenBudget: tokenBudget,
+          aiProvider,
         }),
       });
       if (res.ok) {
@@ -311,6 +334,120 @@ export default function SettingsPage() {
               {savingKey ? "Saving..." : keySaved ? "Saved!" : "Save"}
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      <Separator />
+
+      {/* AI Backend */}
+      <Card>
+        <CardHeader>
+          <CardTitle>AI Backend</CardTitle>
+          <CardDescription>
+            Choose how Vibecheck connects to Claude for AI analysis.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {/* Claude Code (CLI) option */}
+          <button
+            type="button"
+            onClick={() => setAiProvider("cli")}
+            className={`w-full rounded-lg border p-4 text-left transition-colors ${
+              aiProvider === "cli"
+                ? "border-primary bg-primary/5"
+                : "border-border hover:border-muted-foreground/50"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">Claude Code (Max plan)</span>
+                  {aiProvider === "cli" && (
+                    <Badge variant="secondary">Selected</Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Uses <code className="text-xs">claude -p</code> subprocess. No API key needed, no cost tracking.
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs">
+                {checkingCli ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                ) : cliAvailable ? (
+                  <>
+                    <Check className="h-3.5 w-3.5 text-green-500" />
+                    <span className="text-green-600">Available</span>
+                  </>
+                ) : (
+                  <>
+                    <X className="h-3.5 w-3.5 text-red-500" />
+                    <span className="text-red-600">Not found</span>
+                  </>
+                )}
+              </div>
+            </div>
+          </button>
+
+          {/* API Key option */}
+          <button
+            type="button"
+            onClick={() => setAiProvider("api")}
+            className={`w-full rounded-lg border p-4 text-left transition-colors ${
+              aiProvider === "api"
+                ? "border-primary bg-primary/5"
+                : "border-border hover:border-muted-foreground/50"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">API Key</span>
+                  {aiProvider === "api" && (
+                    <Badge variant="secondary">Selected</Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Uses @anthropic-ai/sdk. Shows token usage and cost tracking.
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs">
+                {settings.hasApiKey ? (
+                  <>
+                    <Check className="h-3.5 w-3.5 text-green-500" />
+                    <span className="text-green-600">Available</span>
+                  </>
+                ) : (
+                  <>
+                    <X className="h-3.5 w-3.5 text-red-500" />
+                    <span className="text-red-600">No key</span>
+                  </>
+                )}
+              </div>
+            </div>
+          </button>
+
+          {/* Auto option */}
+          <button
+            type="button"
+            onClick={() => setAiProvider("auto")}
+            className={`w-full rounded-lg border p-4 text-left transition-colors ${
+              aiProvider === "auto"
+                ? "border-primary bg-primary/5"
+                : "border-border hover:border-muted-foreground/50"
+            }`}
+          >
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">Auto-detect</span>
+                {aiProvider === "auto" && (
+                  <Badge variant="secondary">Selected</Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Try Claude Code first (free), fall back to API key if unavailable.
+              </p>
+            </div>
+          </button>
         </CardContent>
       </Card>
 

@@ -1,64 +1,93 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { readFileSync } from 'fs';
-import { join } from 'path';
-import { homedir } from 'os';
+import type { AIProvider } from './providers/types';
+import { createApiProvider, getRawClient, isApiKeyConfigured } from './providers/api';
+import { createCliProvider } from './providers/cli';
 
-let client: Anthropic | null = null;
-let keyChecked = false;
-let apiKey: string | undefined;
+// ── Provider management ──────────────────────────────────────────
+
+let activeProviderName: 'api' | 'cli' | null = null;
+let cachedProvider: AIProvider | null = null;
 
 /**
- * Resolve the API key from environment or ~/.vibecheck/.env file.
+ * Set the active AI provider by name.
+ * Clears the cached provider instance so the next getProvider() call
+ * creates the correct one.
  */
-function resolveApiKey(): string | undefined {
-  // Prefer process.env
-  if (process.env.ANTHROPIC_API_KEY) {
-    return process.env.ANTHROPIC_API_KEY;
-  }
-
-  // Fall back to ~/.vibecheck/.env
-  try {
-    const envPath = join(homedir(), '.vibecheck', '.env');
-    const contents = readFileSync(envPath, 'utf-8');
-    for (const line of contents.split('\n')) {
-      const trimmed = line.trim();
-      if (trimmed.startsWith('#') || !trimmed.includes('=')) continue;
-      const eqIndex = trimmed.indexOf('=');
-      const key = trimmed.slice(0, eqIndex).trim();
-      const value = trimmed.slice(eqIndex + 1).trim().replace(/^["']|["']$/g, '');
-      if (key === 'ANTHROPIC_API_KEY' && value) {
-        return value;
-      }
-    }
-  } catch {
-    // File doesn't exist or isn't readable — that's fine
-  }
-
-  return undefined;
+export function setProvider(name: 'api' | 'cli'): void {
+  activeProviderName = name;
+  cachedProvider = null;
 }
 
 /**
+ * Get the active AI provider.
+ *
+ * Resolution order:
+ *   1. If explicitly set via setProvider(), use that.
+ *   2. Try CLI first (free for Max subscribers).
+ *   3. Fall back to API if an API key is configured.
+ *   4. Return API provider as ultimate default (will report unavailable).
+ */
+export async function getProvider(): Promise<AIProvider> {
+  if (cachedProvider) return cachedProvider;
+
+  if (activeProviderName === 'api') {
+    cachedProvider = createApiProvider();
+    return cachedProvider;
+  }
+
+  if (activeProviderName === 'cli') {
+    cachedProvider = createCliProvider();
+    return cachedProvider;
+  }
+
+  // Auto-detect: prefer CLI, fall back to API
+  const cli = createCliProvider();
+  if (await cli.isAvailable()) {
+    cachedProvider = cli;
+    return cachedProvider;
+  }
+
+  cachedProvider = createApiProvider();
+  return cachedProvider;
+}
+
+/**
+ * Synchronous helper that creates a provider without the availability check.
+ * Useful when the caller will check availability itself.
+ */
+export function getProviderSync(): AIProvider {
+  if (cachedProvider) return cachedProvider;
+
+  if (activeProviderName === 'cli') {
+    cachedProvider = createCliProvider();
+    return cachedProvider;
+  }
+
+  if (activeProviderName === 'api') {
+    cachedProvider = createApiProvider();
+    return cachedProvider;
+  }
+
+  // Default to API for sync path (backward compat)
+  cachedProvider = createApiProvider();
+  return cachedProvider;
+}
+
+// ── Backward-compatible API ──────────────────────────────────────
+
+/**
  * Returns true if an Anthropic API key is configured and available.
+ * @deprecated Use `(await getProvider()).isAvailable()` instead.
  */
 export function isAiAvailable(): boolean {
-  if (!keyChecked) {
-    apiKey = resolveApiKey();
-    keyChecked = true;
-  }
-  return apiKey !== undefined && apiKey.length > 0;
+  return isApiKeyConfigured();
 }
 
 /**
  * Get the singleton Anthropic client.
  * Returns null if no API key is configured (never crashes).
+ * @deprecated Use `getProvider()` instead.
  */
 export function getClient(): Anthropic | null {
-  if (client) return client;
-
-  if (!isAiAvailable()) {
-    return null;
-  }
-
-  client = new Anthropic({ apiKey: apiKey! });
-  return client;
+  return getRawClient();
 }
