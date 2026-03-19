@@ -21,7 +21,13 @@ import { ScanProgress } from '@/components/scan-progress';
 import { ModuleScoreCard } from '@/components/module-score-card';
 import { HotspotQuadrant } from '@/components/hotspot-quadrant';
 import { RadarChart } from '@/components/radar-chart';
-import { Loader2, Play, Sparkles, ShieldAlert, ClipboardCopy, Check } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
+import { Loader2, Play, Sparkles, ShieldAlert, ClipboardCopy, Check, Download, FileText, Globe } from 'lucide-react';
 
 interface RepoData {
   id: string;
@@ -603,6 +609,43 @@ export default function RepoPage() {
                 </div>
               </SheetContent>
             </Sheet>
+          )}
+
+          {scanDetail && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button variant="outline">
+                    <Download className="size-4" data-icon="inline-start" />
+                    Export Report
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => {
+                    window.open(
+                      `/api/reports/${scanDetail.scan.id}?format=md&download=true`,
+                      '_blank',
+                    );
+                  }}
+                >
+                  <FileText className="size-4" data-icon="inline-start" />
+                  Markdown (.md)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    window.open(
+                      `/api/reports/${scanDetail.scan.id}?format=html&download=true`,
+                      '_blank',
+                    );
+                  }}
+                >
+                  <Globe className="size-4" data-icon="inline-start" />
+                  HTML (.html)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
       </div>

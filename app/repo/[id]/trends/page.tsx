@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useMemo, use } from "react";
 import Link from "next/link";
-import { ArrowLeft, TrendingUp, TrendingDown, Minus, BarChart3 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, TrendingUp, TrendingDown, Minus, BarChart3, GitCompareArrows } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -120,11 +121,14 @@ export default function TrendsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const router = useRouter();
 
   const [scans, setScans] = useState<Scan[]>([]);
   const [scanDetails, setScanDetails] = useState<Map<string, ScanDetail>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [compareScanA, setCompareScanA] = useState<string>("");
+  const [compareScanB, setCompareScanB] = useState<string>("");
 
   // Fetch all scans and filter by repoId
   useEffect(() => {
@@ -380,6 +384,74 @@ export default function TrendsPage({
           Historical health data across {scans.length} scans
         </p>
       </div>
+
+      {/* Scan Comparison Picker */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <GitCompareArrows className="h-5 w-5" />
+            Compare Scans
+          </CardTitle>
+          <CardDescription>
+            Select two scans to see a detailed side-by-side comparison
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4">
+            <div className="flex-1 w-full sm:w-auto space-y-1.5">
+              <label htmlFor="scan-a" className="text-sm font-medium text-muted-foreground">
+                Scan A (baseline)
+              </label>
+              <select
+                id="scan-a"
+                value={compareScanA}
+                onChange={(e) => setCompareScanA(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              >
+                <option value="">Select a scan...</option>
+                {scans.map((scan) => (
+                  <option key={scan.id} value={scan.id}>
+                    {formatDate(scan.createdAt)} — Score: {scan.overallScore ?? "N/A"}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex-1 w-full sm:w-auto space-y-1.5">
+              <label htmlFor="scan-b" className="text-sm font-medium text-muted-foreground">
+                Scan B (latest)
+              </label>
+              <select
+                id="scan-b"
+                value={compareScanB}
+                onChange={(e) => setCompareScanB(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              >
+                <option value="">Select a scan...</option>
+                {scans.map((scan) => (
+                  <option key={scan.id} value={scan.id}>
+                    {formatDate(scan.createdAt)} — Score: {scan.overallScore ?? "N/A"}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              disabled={!compareScanA || !compareScanB || compareScanA === compareScanB}
+              onClick={() => {
+                router.push(`/repo/${id}/compare?a=${compareScanA}&b=${compareScanB}`);
+              }}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50 transition-colors"
+            >
+              <GitCompareArrows className="h-4 w-4" />
+              Compare
+            </button>
+          </div>
+          {compareScanA && compareScanB && compareScanA === compareScanB && (
+            <p className="text-xs text-destructive mt-2">
+              Please select two different scans to compare.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Module Score Trends */}
       <Card>

@@ -8,6 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScoreGauge } from '@/components/score-gauge';
 import { FindingsTable } from '@/components/findings-table';
+import { TreemapViz } from '@/components/treemap-viz';
+import { DepGraphViz } from '@/components/dep-graph-viz';
+import { BusFactorHeatmap } from '@/components/bus-factor-heatmap';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -198,6 +201,46 @@ export default function ModulePage() {
                 </div>
               ))}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Module-specific visualization */}
+      {moduleId === 'complexity' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Complexity Treemap</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TreemapViz
+              metrics={moduleData.metrics ?? {}}
+              findings={moduleData.findings}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {moduleId === 'circular-deps' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Dependency Graph</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DepGraphViz findings={moduleData.findings} />
+          </CardContent>
+        </Card>
+      )}
+
+      {moduleId === 'git-health' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Bus Factor Heatmap</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <BusFactorHeatmap
+              metrics={moduleData.metrics ?? {}}
+              findings={moduleData.findings}
+            />
           </CardContent>
         </Card>
       )}

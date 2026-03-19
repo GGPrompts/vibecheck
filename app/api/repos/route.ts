@@ -5,6 +5,7 @@ import { nanoid } from 'nanoid';
 import { eq, desc } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { repos, scans, scanConfigs, moduleResults, findings } from '@/lib/db/schema';
+import { detectWorkspaces } from '@/lib/monorepo/detector';
 
 /**
  * GET /api/repos — List all repos with their latest scan scores.
@@ -36,6 +37,7 @@ export async function GET() {
       return {
         ...repo,
         mode,
+        parentRepoId: repo.parentRepoId ?? null,
         latestScan: latestScan
           ? {
               id: latestScan.id,
@@ -109,7 +111,33 @@ export async function POST(request: Request) {
 
     const created = db.select().from(repos).where(eq(repos.id, id)).get();
 
-    return NextResponse.json(created, { status: 201 });
+    // Detect monorepo workspaces and auto-register them as child repos
+    const workspaces = detectWorkspaces(repoPath);
+    const childRepos: typeof created[] = [];
+    for (const ws of workspaces) {
+      try {
+        const childId = nanoid();
+        const childMeta = JSON.stringify({ mode: mode ?? 'maintaining' });
+        db.insert(repos)
+          .values({
+            id: childId,
+            path: ws.path,
+            name: ws.name,
+            metadata: childMeta,
+            parentRepoId: id,
+          })
+          .run();
+        const child = db.select().from(repos).where(eq(repos.id, childId)).get();
+        if (child) childRepos.push(child);
+      } catch {
+        // Skip workspaces that already exist (UNIQUE constraint on path)
+      }
+    }
+
+    return NextResponse.json(
+      { ...created, children: childRepos },
+      { status: 201 },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (message.includes('UNIQUE constraint')) {

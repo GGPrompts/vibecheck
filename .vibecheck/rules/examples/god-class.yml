@@ -1,0 +1,28 @@
+id: god-class-many-methods
+name: God Class Detection
+pattern: |
+  class $NAME {
+    $$$BEFORE
+    $METHOD1($$$ARGS1) { $$$BODY1 }
+    $METHOD2($$$ARGS2) { $$$BODY2 }
+    $METHOD3($$$ARGS3) { $$$BODY3 }
+    $METHOD4($$$ARGS4) { $$$BODY4 }
+    $METHOD5($$$ARGS5) { $$$BODY5 }
+    $METHOD6($$$ARGS6) { $$$BODY6 }
+    $METHOD7($$$ARGS7) { $$$BODY7 }
+    $METHOD8($$$ARGS8) { $$$BODY8 }
+    $METHOD9($$$ARGS9) { $$$BODY9 }
+    $METHOD10($$$ARGS10) { $$$BODY10 }
+    $$$AFTER
+  }
+language: typescript
+severity: medium
+message: >-
+  Class appears to have 10+ methods, which may indicate a God Class.
+  Large classes with many responsibilities are harder to test, maintain,
+  and reason about.
+suggestion: >-
+  Consider breaking this class into smaller, focused classes using the
+  Single Responsibility Principle. Extract related methods into separate
+  classes or use composition.
+category: code-quality

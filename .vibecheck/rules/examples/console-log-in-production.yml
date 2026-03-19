@@ -1,0 +1,13 @@
+id: console-log-usage
+name: console.log in Production Code
+pattern: console.log($$$)
+language: typescript
+severity: low
+message: >-
+  console.log() call found. In production code, console.log statements
+  can leak sensitive data, clutter output, and degrade performance.
+suggestion: >-
+  Remove console.log() or replace with a structured logging library
+  (e.g., pino, winston) that supports log levels and can be disabled
+  in production.
+category: code-quality

@@ -5,6 +5,7 @@ import { db } from '@/lib/db/client';
 import { scans, moduleResults, findings as findingsTable } from '@/lib/db/schema';
 import { getEnabledModules, getAllModules } from './registry';
 import { computeOverallScore } from './scoring';
+import { readVibecheckRc, mergeWithRc } from '@/lib/config/vibecheckrc';
 import type { ModuleResult } from './types';
 import type { RegisteredModule } from './types';
 
@@ -49,6 +50,12 @@ export async function runScan(
 ): Promise<string> {
   const scanId = nanoid();
   const startTime = Date.now();
+
+  // Read per-repo .vibecheckrc and merge with incoming config
+  const rc = readVibecheckRc(repoPath);
+  if (rc) {
+    config = mergeWithRc(config, rc);
+  }
 
   // Create the scan record
   db.insert(scans).values({

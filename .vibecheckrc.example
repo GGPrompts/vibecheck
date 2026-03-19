@@ -1,0 +1,34 @@
+{
+  "modules": {
+    "security": true,
+    "dependencies": true,
+    "complexity": true,
+    "git-health": true,
+    "dead-code": false,
+    "circular-deps": true,
+    "test-coverage": true,
+    "naming-quality": false,
+    "arch-smells": true,
+    "test-quality": true,
+    "compliance": false,
+    "doc-staleness": true,
+    "ast-rules": true
+  },
+
+  "thresholds": {
+    "security": 80,
+    "test-coverage": 70,
+    "complexity": 60
+  },
+
+  "aiTokenBudget": 50000,
+
+  "ignore": [
+    "node_modules/**",
+    "dist/**",
+    ".next/**",
+    "coverage/**",
+    "**/*.min.js",
+    "vendor/**"
+  ]
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Plus, Play, X, AlertTriangle } from "lucide-react";
+import { Plus, Play, X, AlertTriangle, ChevronDown, ChevronRight, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,12 +16,15 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { RepoHealthCard } from "@/components/repo-health-card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScoreGauge } from "@/components/score-gauge";
 
 interface Repo {
   id: string;
   name: string;
   path: string;
   mode: "maintaining" | "evaluating";
+  parentRepoId: string | null;
   latestScan: {
     id: string;
     status: string;
@@ -301,12 +304,136 @@ export default function DashboardPage() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {repos.map((repo) => (
+        <RepoGrid repos={repos} onScanComplete={fetchRepos} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Groups repos into monorepo parents (with children nested) and standalone repos.
+ */
+function RepoGrid({ repos, onScanComplete }: { repos: Repo[]; onScanComplete: () => void }) {
+  // Build lookup: parentId -> children
+  const childrenByParent = new Map<string, Repo[]>();
+  const childIds = new Set<string>();
+
+  for (const repo of repos) {
+    if (repo.parentRepoId) {
+      childIds.add(repo.id);
+      const siblings = childrenByParent.get(repo.parentRepoId) ?? [];
+      siblings.push(repo);
+      childrenByParent.set(repo.parentRepoId, siblings);
+    }
+  }
+
+  // Top-level repos: those without a parentRepoId
+  const topLevel = repos.filter((r) => !r.parentRepoId);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {topLevel.map((repo) => {
+          const children = childrenByParent.get(repo.id);
+          if (children && children.length > 0) {
+            return (
+              <MonorepoGroup
+                key={repo.id}
+                parent={repo}
+                children={children}
+                onScanComplete={onScanComplete}
+              />
+            );
+          }
+          return (
             <RepoHealthCard
               key={repo.id}
               repo={repo}
-              onScanComplete={fetchRepos}
+              onScanComplete={onScanComplete}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Displays a monorepo parent as a card with aggregated score and expandable
+ * workspace children nested below.
+ */
+function MonorepoGroup({
+  parent,
+  children,
+  onScanComplete,
+}: {
+  parent: Repo;
+  children: Repo[];
+  onScanComplete: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Compute aggregated score: average of all workspace scores that have been scanned
+  const scores = children
+    .map((c) => c.latestScan?.overallScore)
+    .filter((s): s is number => s != null);
+  const parentScore = parent.latestScan?.overallScore;
+  if (parentScore != null) scores.push(parentScore);
+  const aggregatedScore =
+    scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
+
+  return (
+    <div className="col-span-1 md:col-span-2 lg:col-span-3 space-y-2">
+      <Card className="border-2 border-primary/20 bg-primary/5">
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Layers className="h-5 w-5 text-primary" />
+              <span className="truncate font-bold">{parent.name}</span>
+              <span className="text-xs text-muted-foreground font-normal">
+                monorepo &middot; {children.length} workspace{children.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <ScoreGauge score={aggregatedScore} size={56} />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setExpanded(!expanded)}
+              >
+                {expanded ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+                {expanded ? "Collapse" : "Expand"}
+              </Button>
+            </div>
+          </CardTitle>
+          <p className="text-xs text-muted-foreground truncate" title={parent.path}>
+            {parent.path}
+          </p>
+        </CardHeader>
+        {aggregatedScore != null && (
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Aggregated health score across all workspaces: <span className="font-medium text-foreground">{aggregatedScore}/100</span>
+            </p>
+          </CardContent>
+        )}
+      </Card>
+      {expanded && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pl-6 border-l-2 border-primary/20 ml-4">
+          <RepoHealthCard
+            key={parent.id}
+            repo={parent}
+            onScanComplete={onScanComplete}
+          />
+          {children.map((child) => (
+            <RepoHealthCard
+              key={child.id}
+              repo={child}
+              onScanComplete={onScanComplete}
             />
           ))}
         </div>

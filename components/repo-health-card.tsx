@@ -136,7 +136,7 @@ export function RepoHealthCard({ repo, onScanComplete }: RepoHealthCardProps) {
               ? isEvaluation ? "Evaluating..." : "Scanning..."
               : isEvaluation ? "Evaluate" : "Scan"}
           </Button>
-          <Button variant="ghost" size="sm" render={<Link href={`/repo/${repo.id}`} />}>
+          <Button variant="ghost" size="sm" nativeButton={false} render={<Link href={`/repo/${repo.id}`} />}>
             View
           </Button>
         </div>

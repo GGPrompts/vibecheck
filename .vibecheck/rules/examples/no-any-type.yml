@@ -1,0 +1,13 @@
+id: explicit-any-annotation
+name: Explicit any Type Annotation
+pattern: "let $NAME: any"
+language: typescript
+severity: low
+message: >-
+  Explicit "any" type annotation found. Using "any" disables TypeScript's
+  type checking for this value, defeating the purpose of using TypeScript.
+suggestion: >-
+  Replace "any" with a specific type, "unknown" (for truly unknown values
+  that need narrowing), or a generic type parameter. If interfacing with
+  untyped code, create a proper type definition.
+category: code-quality

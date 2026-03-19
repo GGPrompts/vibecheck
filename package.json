@@ -2,6 +2,9 @@
   "name": "vibecheck",
   "version": "0.1.0",
   "private": true,
+  "bin": {
+    "vibecheck": "./bin/vibecheck.mjs"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

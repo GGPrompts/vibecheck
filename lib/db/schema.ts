@@ -10,6 +10,8 @@ export const repos = sqliteTable('repos', {
   lastScanAt: text('last_scan_at'),
   /** JSON metadata field. Stores optional fields like { mode: 'maintaining' | 'evaluating' } */
   metadata: text('metadata'),
+  /** If this repo is a workspace inside a monorepo, references the parent repo id */
+  parentRepoId: text('parent_repo_id'),
 });
 
 export const scans = sqliteTable('scans', {

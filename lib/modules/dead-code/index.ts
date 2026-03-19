@@ -10,8 +10,8 @@ interface KnipOutput {
   files?: string[];
   issues?: Array<{
     file: string;
-    dependencies?: string[];
-    devDependencies?: string[];
+    dependencies?: (string | { name: string })[];
+    devDependencies?: (string | { name: string })[];
     unlisted?: string[];
     exports?: Array<{ name: string; line: number; col: number }>;
     types?: Array<{ name: string; line: number; col: number }>;
@@ -167,7 +167,8 @@ const runner: ModuleRunner = {
 
         // Unused dependencies
         if (issue.dependencies) {
-          for (const dep of issue.dependencies) {
+          for (const raw of issue.dependencies) {
+            const dep = typeof raw === 'string' ? raw : raw.name;
             unusedDeps++;
             const finding: Omit<Finding, 'id' | 'fingerprint'> = {
               severity: 'medium',
@@ -186,7 +187,8 @@ const runner: ModuleRunner = {
 
         // Unused devDependencies
         if (issue.devDependencies) {
-          for (const dep of issue.devDependencies) {
+          for (const raw of issue.devDependencies) {
+            const dep = typeof raw === 'string' ? raw : raw.name;
             unusedDeps++;
             const finding: Omit<Finding, 'id' | 'fingerprint'> = {
               severity: 'medium',

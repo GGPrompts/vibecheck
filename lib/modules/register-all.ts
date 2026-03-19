@@ -10,8 +10,9 @@ import './dead-code';
 import './circular-deps';
 import './test-coverage';
 
-// Compliance modules (structural pattern matching via ast-grep)
+// Structural pattern matching modules (ast-grep)
 import './compliance';
+import './ast-rules';
 
 // AI-powered modules (require ANTHROPIC_API_KEY)
 import './naming-quality';

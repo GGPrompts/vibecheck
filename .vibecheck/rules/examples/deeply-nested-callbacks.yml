@@ -1,0 +1,22 @@
+id: deeply-nested-callbacks
+name: Deeply Nested Callbacks
+pattern: |
+  function($$$) {
+    $$$A
+    function($$$) {
+      $$$B
+      function($$$) {
+        $$$C
+      }
+    }
+  }
+language: javascript
+severity: medium
+message: >-
+  Found deeply nested callback functions (3+ levels). This "callback hell"
+  pattern makes code hard to read, debug, and maintain.
+suggestion: >-
+  Refactor using async/await, Promises, or extract inner callbacks into
+  named functions. Consider using a control flow library if dealing with
+  complex async sequences.
+category: code-quality

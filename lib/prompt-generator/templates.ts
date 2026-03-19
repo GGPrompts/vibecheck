@@ -97,12 +97,29 @@ export function gitHealthTemplate(findings: PrioritizedFinding[]): PromptSection
   };
 }
 
+export function deadCodeTemplate(findings: PrioritizedFinding[]): PromptSection {
+  const filePath = findings[0].filePath;
+  const details = findings.map((f) => `- ${locationString(f)}: ${f.message}`);
+  const actions = findings.map((f) => {
+    if (f.suggestion) return `- ${f.suggestion}`;
+    return '- Remove unused code to reduce bundle size and maintenance burden.';
+  });
+
+  return {
+    filePath,
+    summary: `${findings.length} dead code issue${findings.length > 1 ? 's' : ''} in ${filePath}`,
+    details,
+    actions: [...new Set(actions)],
+    context: contextLine(findings[0]),
+  };
+}
+
 export function genericTemplate(findings: PrioritizedFinding[]): PromptSection {
   const filePath = findings[0].filePath;
   const details = findings.map((f) => `- ${locationString(f)}: ${f.message}`);
   const actions = findings.map((f) => {
     if (f.suggestion) return `- ${f.suggestion}`;
-    return `- Review and address this ${f.severity} issue.`;
+    return `- Investigate and fix: ${f.message}`;
   });
 
   return {
@@ -126,6 +143,12 @@ const CATEGORY_TEMPLATES: Record<
   'git_health': gitHealthTemplate,
   'bus-factor': gitHealthTemplate,
   'bus_factor': gitHealthTemplate,
+  churn: gitHealthTemplate,
+  'todo-age': gitHealthTemplate,
+  staleness: gitHealthTemplate,
+  'dead-code': deadCodeTemplate,
+  'dead-dependency': deadCodeTemplate,
+  'dead-file': deadCodeTemplate,
 };
 
 /**
