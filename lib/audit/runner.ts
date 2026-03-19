@@ -339,10 +339,11 @@ export async function runAudit(
       // Use custom system prompt if available, otherwise fall back to default
       const systemPrompt = customPrompts[moduleId] ?? promptTemplate.systemPrompt;
 
-      // Send to AI provider
+      // Send to AI provider — use tier's model selection
       const response = await provider.query(userPrompt, {
         system: systemPrompt,
         maxTokens: 4096,
+        model: tierConfig.models.default,
       });
 
       // Parse the response
