@@ -6,3 +6,6 @@ import './security';
 import './dependencies';
 import './complexity';
 import './git-health';
+import './dead-code';
+import './circular-deps';
+import './test-coverage';
