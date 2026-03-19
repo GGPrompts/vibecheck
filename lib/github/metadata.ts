@@ -105,8 +105,9 @@ export async function searchGitHubRepos(
 
   let raw: string;
   try {
+    const encodedQuery = encodeURIComponent(query);
     raw = execSync(
-      `gh api search/repositories -f q=${JSON.stringify(query)} -f per_page=${clampedLimit}`,
+      `gh api "search/repositories?q=${encodedQuery}&per_page=${clampedLimit}"`,
       {
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe'],
