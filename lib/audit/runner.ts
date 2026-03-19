@@ -12,6 +12,7 @@ import { getAuditPrompt, getAvailableAuditModules } from './prompts';
 import { auditEvents } from './event-emitter';
 import { readSettings } from '@/lib/config/settings';
 import { readVibecheckRc } from '@/lib/config/vibecheckrc';
+import { getTierConfig, type ScanTier, type TierConfig } from '@/lib/config/tiers';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -247,23 +248,17 @@ export async function runAudit(
     throw new Error(`AI provider '${opts.provider}' is not available`);
   }
 
-  // Select high-value files for review (from CODE, not from scan results)
-  const files = selectFilesForAudit(repoPath);
-  if (files.length === 0) {
-    db.update(audits)
-      .set({ status: 'failed', durationMs: Date.now() - startTime })
-      .where(eq(audits.id, auditId))
-      .run();
-    throw new Error('No source files found in repository');
-  }
-
-  // Load custom prompts: settings (global) override, then .vibecheckrc (repo-level) override
+  // Load settings and rc config for custom prompts and tier resolution.
   // Repo-level (.vibecheckrc) takes precedence over global settings.
   let customPrompts: Record<string, string> = {};
+  let resolvedTier: ScanTier = 'max'; // default tier
   try {
     const settings = readSettings();
     if (settings.auditPrompts) {
       customPrompts = { ...settings.auditPrompts };
+    }
+    if (settings.tier) {
+      resolvedTier = settings.tier;
     }
   } catch {
     // Settings unavailable — use defaults
@@ -273,8 +268,26 @@ export async function runAudit(
     if (rc?.auditPrompts) {
       customPrompts = { ...customPrompts, ...rc.auditPrompts };
     }
+    // RC tier overrides global settings tier
+    if (rc?.tier) {
+      resolvedTier = rc.tier;
+    }
   } catch {
     // RC unavailable — use defaults
+  }
+
+  const tierConfig: TierConfig = getTierConfig(resolvedTier);
+
+  // Select high-value files for review (from CODE, not from scan results).
+  // Tier coverage controls how many files: sampled = top 10, full = default MAX_AUDIT_FILES.
+  const maxFiles = tierConfig.coverage === 'sampled' ? 10 : MAX_AUDIT_FILES;
+  const files = selectFilesForAudit(repoPath, maxFiles);
+  if (files.length === 0) {
+    db.update(audits)
+      .set({ status: 'failed', durationMs: Date.now() - startTime })
+      .where(eq(audits.id, auditId))
+      .run();
+    throw new Error('No source files found in repository');
   }
 
   let moduleErrors = 0;

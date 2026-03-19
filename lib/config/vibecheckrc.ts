@@ -31,6 +31,9 @@ const vibecheckRcSchema = z.object({
 
   /** Manual file-role classification overrides. Keys are relative paths or prefix globs. */
   classify: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional(),
+
+  /** Scan tier — controls model selection, parallelism, and coverage depth. */
+  tier: z.enum(['pro', 'max', 'max-x20', 'api']).optional(),
 });
 
 export type VibecheckRc = z.infer<typeof vibecheckRcSchema>;

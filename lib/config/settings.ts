@@ -8,6 +8,7 @@ const CONFIG_PATH = join(VIBECHECK_DIR, 'config.json');
 export interface Settings {
   scanDirs?: string[];
   auditPrompts?: Record<string, string>;
+  tier?: 'pro' | 'max' | 'max-x20' | 'api';
 }
 
 /**
@@ -42,6 +43,10 @@ export function readSettings(): Settings {
       if (Object.keys(prompts).length > 0) {
         result.auditPrompts = prompts;
       }
+    }
+    const validTiers = ['pro', 'max', 'max-x20', 'api'] as const;
+    if (typeof parsed.tier === 'string' && (validTiers as readonly string[]).includes(parsed.tier)) {
+      result.tier = parsed.tier as Settings['tier'];
     }
     return result;
   } catch {
