@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
-import { Search, Loader2, Globe, GitCompareArrows } from "lucide-react";
+import { Search, Loader2, Globe, GitCompareArrows, TrendingUp, Terminal, Box, Brain, Wrench } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { GitHubRepoCard } from "@/components/github/repo-card";
@@ -17,6 +17,16 @@ interface GitHubSearchResult {
   forks_count: number;
   pushed_at: string;
 }
+
+const CATEGORIES = [
+  { key: "trending", label: "Trending", icon: TrendingUp },
+  { key: "cli", label: "CLI Tools", icon: Terminal },
+  { key: "frameworks", label: "Frameworks", icon: Box },
+  { key: "ai", label: "AI/ML", icon: Brain },
+  { key: "devtools", label: "DevTools", icon: Wrench },
+] as const;
+
+type CategoryKey = (typeof CATEGORIES)[number]["key"];
 
 /**
  * Detect whether the input looks like a GitHub URL or owner/repo pattern
@@ -48,6 +58,7 @@ export default function ExplorePage() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState<CategoryKey | null>("trending");
 
   // Scan-via-URL state
   const [scanningUrl, setScanningUrl] = useState(false);
@@ -61,10 +72,54 @@ export default function ExplorePage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Focus input on mount
+  const fetchCategory = useCallback(async (category: CategoryKey) => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setLoading(true);
+    setError(null);
+    setResults([]);
+    setScanResult(null);
+    setSearched(false);
+
+    try {
+      const res = await fetch(
+        `/api/github/trending?category=${encodeURIComponent(category)}`,
+        { signal: controller.signal },
+      );
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Failed to load category");
+        setSearched(true);
+        return;
+      }
+
+      if (Array.isArray(data)) {
+        setResults(data);
+      }
+      setSearched(true);
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      setError("Failed to load category");
+      setSearched(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Focus input and load trending on mount
   useEffect(() => {
     inputRef.current?.focus();
-  }, []);
+    fetchCategory("trending");
+  }, [fetchCategory]);
+
+  function handleCategoryClick(category: CategoryKey) {
+    setActiveCategory(category);
+    setQuery("");
+    fetchCategory(category);
+  }
 
   const handleSearch = useCallback(
     async (value: string) => {
@@ -77,6 +132,7 @@ export default function ExplorePage() {
       abortRef.current = controller;
 
       setError(null);
+      setActiveCategory(null);
 
       if (isGitHubUrl(trimmed)) {
         // Direct URL/owner-repo: trigger scan immediately
@@ -213,6 +269,24 @@ export default function ExplorePage() {
         </Link>
       </div>
 
+      {/* Category pills */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {CATEGORIES.map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => handleCategoryClick(key)}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+              activeCategory === key
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+            }`}
+          >
+            <Icon className="h-3.5 w-3.5" />
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Error */}
       {error && (
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -268,8 +342,8 @@ export default function ExplorePage() {
         </div>
       )}
 
-      {/* Initial state — before any search */}
-      {!loading && !scanningUrl && !searched && !error && (
+      {/* Initial state — only shown if category fetch hasn't started yet */}
+      {!loading && !scanningUrl && !searched && !error && !activeCategory && (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed p-16 text-center">
           <Globe className="h-12 w-12 text-muted-foreground/30 mb-4" />
           <p className="text-lg font-medium text-muted-foreground">
@@ -277,7 +351,7 @@ export default function ExplorePage() {
           </p>
           <p className="text-sm text-muted-foreground/70 mt-1 max-w-md">
             Search by name or topic, or paste a GitHub URL to instantly scan a
-            repository's code health.
+            repository&apos;s code health.
           </p>
         </div>
       )}
