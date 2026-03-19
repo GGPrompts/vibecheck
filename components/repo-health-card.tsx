@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Eye, EyeOff, ExternalLink } from "lucide-react";
+import { Eye, EyeOff, ExternalLink, X, Copy, Check } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScoreGauge } from "@/components/score-gauge";
@@ -78,12 +78,14 @@ interface RepoHealthCardProps {
   repo: Repo;
   onScanComplete?: () => void;
   onActiveToggle?: (repoId: string, active: boolean) => void;
+  onRemove?: (repoId: string) => void;
 }
 
-export function RepoHealthCard({ repo, onScanComplete, onActiveToggle }: RepoHealthCardProps) {
+export function RepoHealthCard({ repo, onScanComplete, onActiveToggle, onRemove }: RepoHealthCardProps) {
   const [scanning, setScanning] = useState(false);
   const [scanId, setScanId] = useState<string | null>(null);
   const [toggling, setToggling] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [profile, setProfile] = useState<string | null>(_profileCache);
 
   useEffect(() => {
@@ -149,6 +151,24 @@ export function RepoHealthCard({ repo, onScanComplete, onActiveToggle }: RepoHea
     }
   }
 
+  async function handleRemove() {
+    try {
+      await fetch("/api/repos", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: repo.id }),
+      });
+      onRemove?.(repo.id);
+    } catch { /* ignore */ }
+  }
+
+  function handleCopyClone() {
+    if (!githubUrl) return;
+    navigator.clipboard.writeText(`git clone ${githubUrl}.git`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   // For evaluation repos, invert score display (high score = risky)
   const displayScore = isEvaluation && repo.latestScan?.overallScore != null
     ? 100 - repo.latestScan.overallScore
@@ -169,6 +189,17 @@ export function RepoHealthCard({ repo, onScanComplete, onActiveToggle }: RepoHea
         <CardTitle className="flex items-center justify-between">
           <span className="truncate font-bold">{repo.name}</span>
           <div className="flex items-center gap-2">
+            {githubUrl && onRemove && (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={handleRemove}
+                title="Remove repo"
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon-xs"
@@ -249,6 +280,20 @@ export function RepoHealthCard({ repo, onScanComplete, onActiveToggle }: RepoHea
           <Button variant="ghost" size="sm" nativeButton={false} render={<Link href={`/repo/${repo.id}`} />}>
             View
           </Button>
+          {githubUrl && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleCopyClone}
+              title="Copy git clone command"
+            >
+              {copied ? (
+                <><Check className="h-3.5 w-3.5 mr-1" />Copied</>
+              ) : (
+                <><Copy className="h-3.5 w-3.5 mr-1" />Clone</>
+              )}
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>

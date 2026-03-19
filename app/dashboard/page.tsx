@@ -425,7 +425,7 @@ export default function DashboardPage() {
           </p>
         </div>
       ) : (
-        <RepoGrid repos={filteredRepos} onScanComplete={fetchRepos} onActiveToggle={handleActiveToggle} />
+        <RepoGrid repos={filteredRepos} onScanComplete={fetchRepos} onActiveToggle={handleActiveToggle} onRemove={fetchRepos} />
       )}
 
       {/* Discover Repos Dialog */}
@@ -537,7 +537,7 @@ export default function DashboardPage() {
 /**
  * Groups repos into monorepo parents (with children nested) and standalone repos.
  */
-function RepoGrid({ repos, onScanComplete, onActiveToggle }: { repos: Repo[]; onScanComplete: () => void; onActiveToggle: (repoId: string, active: boolean) => void }) {
+function RepoGrid({ repos, onScanComplete, onActiveToggle, onRemove }: { repos: Repo[]; onScanComplete: () => void; onActiveToggle: (repoId: string, active: boolean) => void; onRemove?: () => void }) {
   // Build lookup: parentId -> children
   const childrenByParent = new Map<string, Repo[]>();
   const childIds = new Set<string>();
@@ -576,6 +576,7 @@ function RepoGrid({ repos, onScanComplete, onActiveToggle }: { repos: Repo[]; on
               repo={repo}
               onScanComplete={onScanComplete}
               onActiveToggle={onActiveToggle}
+              onRemove={onRemove ? () => onRemove() : undefined}
             />
           );
         })}
