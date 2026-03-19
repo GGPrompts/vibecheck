@@ -91,7 +91,7 @@ export function ModuleScoreCard({
         </CardHeader>
         <CardContent className="space-y-3">
           <div className={`text-3xl font-bold ${scoreColor(score)}`}>
-            {score}
+            {score}<span className="text-base font-normal text-muted-foreground">/100</span>
           </div>
           {top3Findings.length > 0 && (
             <ul className="space-y-1">

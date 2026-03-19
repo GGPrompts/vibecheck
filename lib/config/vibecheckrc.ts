@@ -84,16 +84,35 @@ export function mergeWithRc(
 
   // ── modules → enabledModules ──
   if (rc.modules) {
-    // Start from whatever the caller already had (or nothing)
-    const enabled = new Set<string>(merged.enabledModules ?? []);
-    for (const [id, on] of Object.entries(rc.modules)) {
-      if (on) {
-        enabled.add(id);
-      } else {
-        enabled.delete(id);
+    // Start from the base config, or undefined to signal "use defaults".
+    // If base has no enabledModules, leave it undefined so the registry
+    // falls back to defaultEnabled modules. Only set it explicitly if
+    // there's actually something to override.
+    if (!merged.enabledModules) {
+      // No base list — only set enabledModules if rc explicitly enables something.
+      // Disables are a no-op when there's no base list (registry defaults handle it).
+      const explicit = Object.entries(rc.modules).filter(([, on]) => on).map(([id]) => id);
+      if (explicit.length > 0) {
+        merged.enabledModules = explicit;
       }
+      // For disables without a base, we can't remove from "all defaults" without
+      // importing the registry. Instead, pass the disable list downstream.
+      const disables = Object.entries(rc.modules).filter(([, on]) => !on).map(([id]) => id);
+      if (disables.length > 0 && !merged.enabledModules) {
+        // Signal to orchestrator: use defaults minus these
+        (merged as ScanConfig & { disableModules?: string[] }).disableModules = disables;
+      }
+    } else {
+      const enabled = new Set<string>(merged.enabledModules);
+      for (const [id, on] of Object.entries(rc.modules)) {
+        if (on) {
+          enabled.add(id);
+        } else {
+          enabled.delete(id);
+        }
+      }
+      merged.enabledModules = Array.from(enabled);
     }
-    merged.enabledModules = Array.from(enabled);
   }
 
   // ── thresholds / aiTokenBudget / ignore ──

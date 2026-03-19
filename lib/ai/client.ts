@@ -9,6 +9,27 @@ let activeProviderName: 'api' | 'cli' | null = null;
 let cachedProvider: AIProvider | null = null;
 
 /**
+ * Read the persisted provider preference from ~/.vibecheck/.env.
+ */
+function getPersistedProvider(): 'api' | 'cli' | null {
+  if (activeProviderName) return activeProviderName;
+  try {
+    const { readFileSync } = require('fs');
+    const { join } = require('path');
+    const { homedir } = require('os');
+    const envPath = join(homedir(), '.vibecheck', '.env');
+    const content = readFileSync(envPath, 'utf-8');
+    const match = content.match(/^VIBECHECK_AI_PROVIDER=(.+)$/m);
+    if (match && (match[1] === 'api' || match[1] === 'cli')) {
+      return match[1];
+    }
+  } catch {
+    // No persisted preference
+  }
+  return null;
+}
+
+/**
  * Set the active AI provider by name.
  * Clears the cached provider instance so the next getProvider() call
  * creates the correct one.
@@ -23,19 +44,22 @@ export function setProvider(name: 'api' | 'cli'): void {
  *
  * Resolution order:
  *   1. If explicitly set via setProvider(), use that.
- *   2. Try CLI first (free for Max subscribers).
- *   3. Fall back to API if an API key is configured.
- *   4. Return API provider as ultimate default (will report unavailable).
+ *   2. If persisted in VIBECHECK_AI_PROVIDER, use that.
+ *   3. Try CLI first (free for Max subscribers).
+ *   4. Fall back to API if an API key is configured.
+ *   5. Return API provider as ultimate default (will report unavailable).
  */
 export async function getProvider(): Promise<AIProvider> {
   if (cachedProvider) return cachedProvider;
 
-  if (activeProviderName === 'api') {
+  const preferred = getPersistedProvider();
+
+  if (preferred === 'api') {
     cachedProvider = createApiProvider();
     return cachedProvider;
   }
 
-  if (activeProviderName === 'cli') {
+  if (preferred === 'cli') {
     cachedProvider = createCliProvider();
     return cachedProvider;
   }

@@ -27,13 +27,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Repo not found' }, { status: 404 });
     }
 
-    // Look up scan config for this repo
+    // Look up scan config: try repo-specific first, then global (repoId IS NULL)
     let config: ScanConfig | undefined;
-    const savedConfig = db
-      .select()
-      .from(scanConfigs)
-      .where(eq(scanConfigs.repoId, repoId))
-      .get();
+    const savedConfig =
+      db.select().from(scanConfigs).where(eq(scanConfigs.repoId, repoId)).get() ??
+      db.select().from(scanConfigs).limit(1).get();
 
     if (savedConfig) {
       config = {

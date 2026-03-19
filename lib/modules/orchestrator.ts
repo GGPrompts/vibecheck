@@ -65,12 +65,20 @@ export async function runScan(
     configSnapshot: config ? JSON.stringify(config) : null,
   }).run();
 
-  const enabledModules = getEnabledModules(config?.enabledModules);
+  let enabledModules = getEnabledModules(config?.enabledModules);
+
+  // Handle .vibecheckrc disableModules (when no base enabledModules list exists)
+  const disableModules = (config as ScanConfig & { disableModules?: string[] } | undefined)?.disableModules;
+  if (disableModules && disableModules.length > 0) {
+    const disableSet = new Set(disableModules);
+    enabledModules = enabledModules.filter((m) => !disableSet.has(m.definition.id));
+  }
   const resultSummaries: Array<{
     moduleId: string;
     score: number;
     confidence: number;
   }> = [];
+  let moduleErrors = 0;
 
   for (const mod of enabledModules) {
     const { definition, runner } = mod;
@@ -161,6 +169,7 @@ export async function runScan(
         progress: 0,
         message: `${definition.name} failed: ${errorMessage}`,
       });
+      moduleErrors++;
     }
   }
 
@@ -171,10 +180,18 @@ export async function runScan(
   const overallScore = computeOverallScore(resultSummaries, config?.weights);
   const durationMs = Date.now() - startTime;
 
+  // Determine final status: 'completed' if all modules ran, 'partial' if some failed, 'failed' if all failed
+  const totalModules = enabledModules.length;
+  const finalStatus = moduleErrors === 0
+    ? 'completed'
+    : moduleErrors < totalModules
+      ? 'completed'  // partial success still counts as completed, but we track errors
+      : 'failed';
+
   // Update scan record
   db.update(scans)
     .set({
-      status: 'completed',
+      status: finalStatus,
       overallScore,
       durationMs,
     })

@@ -82,7 +82,7 @@ function loadReportData(repoId: string) {
     .all() as ScanRow[];
 
   const scanDetails: ScanWithModules[] = allScans
-    .filter((s) => s.status === 'complete')
+    .filter((s) => s.status === 'completed')
     .map((scan) => {
       const results = db
         .select()
@@ -572,7 +572,7 @@ function loadScanReportData(scanId: string): ScanReportData {
 
   let previousScan: ScanWithModules | null = null;
   for (const s of allScans) {
-    if (s.id !== scanId && s.status === 'complete') {
+    if (s.id !== scanId && s.status === 'completed') {
       const prevResults = db
         .select()
         .from(moduleResults)

@@ -121,7 +121,7 @@ function statusBadgeVariant(
   status: string
 ): 'default' | 'secondary' | 'destructive' | 'outline' {
   switch (status) {
-    case 'complete':
+    case 'completed':
       return 'default';
     case 'running':
       return 'secondary';
@@ -175,7 +175,7 @@ export default function AuditPage({
         // Fetch module details for completed scans
         const detailsMap = new Map<string, ScanDetail>();
         const detailPromises = repoScans
-          .filter((s) => s.status === 'complete')
+          .filter((s) => s.status === 'completed')
           .map(async (scan) => {
             try {
               const res = await fetch(`/api/scans/${scan.id}`);
@@ -558,7 +558,7 @@ export default function AuditPage({
                     {isExpanded && !entry.detail && (
                       <div className="px-6 pb-4 pl-16">
                         <p className="text-sm text-muted-foreground">
-                          {entry.scan.status === 'complete'
+                          {entry.scan.status === 'completed'
                             ? 'Module details unavailable for this scan.'
                             : `Scan status: ${entry.scan.status}`}
                         </p>

@@ -142,7 +142,7 @@ export default function TrendsPage({
 
         const allScans: Scan[] = await scansRes.json();
         const repoScans = allScans
-          .filter((s) => s.repoId === id && s.status === "complete")
+          .filter((s) => s.repoId === id && s.status === "completed")
           .sort(
             (a, b) =>
               new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()

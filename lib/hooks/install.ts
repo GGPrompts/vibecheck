@@ -9,17 +9,17 @@ function getHookPath(repoPath: string): string {
 
 /**
  * Generate the hook script content.
- * Runs snapshot.js in the background so it never blocks `git commit`.
+ * Runs snapshot.ts via tsx in the background so it never blocks `git commit`.
  */
 function buildHookScript(repoPath: string): string {
   // Resolve the vibecheck project root (two levels up from lib/hooks/)
   const vibecheckRoot = resolve(__dirname, '..', '..');
-  const snapshotScript = join(vibecheckRoot, 'lib', 'hooks', 'snapshot.js');
+  const snapshotScript = join(vibecheckRoot, 'lib', 'hooks', 'snapshot.ts');
 
   return [
     '',
     HOOK_MARKER,
-    `node "${snapshotScript}" "${repoPath}" >/dev/null 2>&1 &`,
+    `npx tsx "${snapshotScript}" "${repoPath}" >/dev/null 2>&1 &`,
     '# end vibecheck hook',
   ].join('\n');
 }
