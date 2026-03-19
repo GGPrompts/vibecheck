@@ -16,6 +16,9 @@ export function computeOverallScore(
   let weightedSum = 0;
 
   for (const result of results) {
+    // Skip failed modules (score -1) — they shouldn't drag down the overall score
+    if (result.score < 0) continue;
+
     const baseWeight = weights?.[result.moduleId] ?? 1;
     const effectiveWeight = baseWeight * result.confidence;
     weightedSum += result.score * effectiveWeight;

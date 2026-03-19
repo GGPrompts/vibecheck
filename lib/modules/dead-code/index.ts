@@ -208,11 +208,12 @@ const runner: ModuleRunner = {
     }
 
     // Scoring: start at 100, deduct per category
+    // Unused exports are common in libraries/UI kits and have less impact per item
     let score = 100;
-    score -= unusedFiles * 3;
-    score -= unusedExports * 1;
+    score -= unusedFiles * 5;
+    score -= Math.min(unusedExports * 0.5, 30); // Cap export deductions at 30 points
     score -= unusedDeps * 5;
-    score = Math.max(0, score);
+    score = Math.max(0, Math.round(score));
 
     const metrics: Record<string, number> = {
       unusedFiles,
