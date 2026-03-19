@@ -25,6 +25,9 @@ const vibecheckRcSchema = z.object({
 
   /** Glob patterns for files/dirs the scan should ignore. */
   ignore: z.array(z.string()).optional(),
+
+  /** Custom audit prompt overrides per module ID. */
+  auditPrompts: z.record(z.string(), z.string()).optional(),
 });
 
 export type VibecheckRc = z.infer<typeof vibecheckRcSchema>;

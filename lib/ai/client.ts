@@ -2,16 +2,18 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { AIProvider } from './providers/types';
 import { createApiProvider, getRawClient, isApiKeyConfigured } from './providers/api';
 import { createCliProvider } from './providers/cli';
+import { createCodexProvider } from './providers/codex';
+export { createCodexProvider } from './providers/codex';
 
 // ── Provider management ──────────────────────────────────────────
 
-let activeProviderName: 'api' | 'cli' | null = null;
+let activeProviderName: 'api' | 'cli' | 'codex' | null = null;
 let cachedProvider: AIProvider | null = null;
 
 /**
  * Read the persisted provider preference from ~/.vibecheck/.env.
  */
-function getPersistedProvider(): 'api' | 'cli' | null {
+function getPersistedProvider(): 'api' | 'cli' | 'codex' | null {
   if (activeProviderName) return activeProviderName;
   try {
     const { readFileSync } = require('fs');
@@ -20,7 +22,7 @@ function getPersistedProvider(): 'api' | 'cli' | null {
     const envPath = join(homedir(), '.vibecheck', '.env');
     const content = readFileSync(envPath, 'utf-8');
     const match = content.match(/^VIBECHECK_AI_PROVIDER=(.+)$/m);
-    if (match && (match[1] === 'api' || match[1] === 'cli')) {
+    if (match && (match[1] === 'api' || match[1] === 'cli' || match[1] === 'codex')) {
       return match[1];
     }
   } catch {
@@ -34,7 +36,7 @@ function getPersistedProvider(): 'api' | 'cli' | null {
  * Clears the cached provider instance so the next getProvider() call
  * creates the correct one.
  */
-export function setProvider(name: 'api' | 'cli'): void {
+export function setProvider(name: 'api' | 'cli' | 'codex'): void {
   activeProviderName = name;
   cachedProvider = null;
 }
@@ -64,6 +66,11 @@ export async function getProvider(): Promise<AIProvider> {
     return cachedProvider;
   }
 
+  if (preferred === 'codex') {
+    cachedProvider = createCodexProvider();
+    return cachedProvider;
+  }
+
   // Auto-detect: prefer CLI, fall back to API
   const cli = createCliProvider();
   if (await cli.isAvailable()) {
@@ -89,6 +96,11 @@ export function getProviderSync(): AIProvider {
 
   if (activeProviderName === 'api') {
     cachedProvider = createApiProvider();
+    return cachedProvider;
+  }
+
+  if (activeProviderName === 'codex') {
+    cachedProvider = createCodexProvider();
     return cachedProvider;
   }
 

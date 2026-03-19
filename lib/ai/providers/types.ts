@@ -1,9 +1,10 @@
 /**
  * Common types for the AI provider abstraction layer.
  *
- * Two providers are supported:
- *   - 'api'  — Anthropic SDK (pay-per-token)
- *   - 'cli'  — `claude -p` subprocess (free for Max subscribers)
+ * Three providers are supported:
+ *   - 'api'   — Anthropic SDK (pay-per-token)
+ *   - 'cli'   — `claude -p` subprocess (free for Max subscribers)
+ *   - 'codex' — OpenAI Codex CLI subprocess (cross-model AI audits)
  */
 
 export interface AIResponse {
@@ -20,7 +21,7 @@ export interface AIQueryOptions {
 }
 
 export interface AIProvider {
-  name: 'api' | 'cli';
+  name: 'api' | 'cli' | 'codex';
   /** Whether this provider returns token counts for cost tracking. */
   tracksCost: boolean;
   /** Returns true if the provider is ready to accept queries. */

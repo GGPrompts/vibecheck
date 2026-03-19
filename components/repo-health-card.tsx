@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Eye, EyeOff } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScoreGauge } from "@/components/score-gauge";
@@ -12,6 +13,7 @@ interface Repo {
   id: string;
   name: string;
   path: string;
+  active?: boolean;
   mode?: "maintaining" | "evaluating";
   latestScan: {
     id: string;
@@ -46,13 +48,16 @@ function formatRelativeTime(dateStr: string | null): string {
 interface RepoHealthCardProps {
   repo: Repo;
   onScanComplete?: () => void;
+  onActiveToggle?: (repoId: string, active: boolean) => void;
 }
 
-export function RepoHealthCard({ repo, onScanComplete }: RepoHealthCardProps) {
+export function RepoHealthCard({ repo, onScanComplete, onActiveToggle }: RepoHealthCardProps) {
   const [scanning, setScanning] = useState(false);
   const [scanId, setScanId] = useState<string | null>(null);
+  const [toggling, setToggling] = useState(false);
 
   const isEvaluation = repo.mode === "evaluating";
+  const isActive = repo.active !== false;
 
   async function handleScan() {
     setScanning(true);
@@ -79,6 +84,24 @@ export function RepoHealthCard({ repo, onScanComplete }: RepoHealthCardProps) {
     onScanComplete?.();
   }
 
+  async function handleToggleActive() {
+    setToggling(true);
+    try {
+      const res = await fetch("/api/repos", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repoId: repo.id, active: !isActive }),
+      });
+      if (res.ok) {
+        onActiveToggle?.(repo.id, !isActive);
+      }
+    } catch {
+      // Silently handle errors
+    } finally {
+      setToggling(false);
+    }
+  }
+
   // For evaluation repos, invert score display (high score = risky)
   const displayScore = isEvaluation && repo.latestScan?.overallScore != null
     ? 100 - repo.latestScan.overallScore
@@ -86,20 +109,38 @@ export function RepoHealthCard({ repo, onScanComplete }: RepoHealthCardProps) {
 
   return (
     <Card
-      className={
+      className={[
         isEvaluation
           ? "border-dashed border-2 border-amber-500/40 bg-amber-50/5"
-          : undefined
-      }
+          : undefined,
+        !isActive ? "opacity-50" : undefined,
+      ]
+        .filter(Boolean)
+        .join(" ") || undefined}
     >
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <span className="truncate font-bold">{repo.name}</span>
-          <ScoreGauge
-            score={displayScore}
-            size={56}
-            invertColors={isEvaluation}
-          />
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={handleToggleActive}
+              disabled={toggling}
+              title={isActive ? "Deactivate repo" : "Activate repo"}
+            >
+              {isActive ? (
+                <Eye className="h-3.5 w-3.5" />
+              ) : (
+                <EyeOff className="h-3.5 w-3.5" />
+              )}
+            </Button>
+            <ScoreGauge
+              score={displayScore}
+              size={56}
+              invertColors={isEvaluation}
+            />
+          </div>
         </CardTitle>
         <div className="flex items-center gap-2">
           <p className="text-xs text-muted-foreground truncate flex-1" title={repo.path}>

@@ -37,6 +37,7 @@ export async function GET() {
       return {
         ...repo,
         mode,
+        active: !!repo.active,
         parentRepoId: repo.parentRepoId ?? null,
         latestScan: latestScan
           ? {
@@ -63,9 +64,10 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { path: repoPath, mode } = body as {
+    const { path: repoPath, mode, active } = body as {
       path: string;
       mode?: 'maintaining' | 'evaluating';
+      active?: boolean;
     };
 
     if (!repoPath || typeof repoPath !== 'string') {
@@ -105,8 +107,9 @@ export async function POST(request: Request) {
 
     const id = nanoid();
     const metadata = JSON.stringify({ mode: mode ?? 'maintaining' });
+    const activeValue = active === false ? 0 : 1;
     db.insert(repos)
-      .values({ id, path: repoPath, name, metadata })
+      .values({ id, path: repoPath, name, metadata, active: activeValue })
       .run();
 
     const created = db.select().from(repos).where(eq(repos.id, id)).get();
@@ -146,6 +149,47 @@ export async function POST(request: Request) {
         { status: 409 }
       );
     }
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+/**
+ * PATCH /api/repos — Toggle active status for a repo.
+ * Body: { repoId: string, active: boolean }
+ */
+export async function PATCH(request: Request) {
+  try {
+    const body = await request.json();
+    const { repoId, active } = body as { repoId: string; active: boolean };
+
+    if (!repoId || typeof repoId !== 'string') {
+      return NextResponse.json(
+        { error: 'repoId is required and must be a string' },
+        { status: 400 }
+      );
+    }
+
+    if (typeof active !== 'boolean') {
+      return NextResponse.json(
+        { error: 'active is required and must be a boolean' },
+        { status: 400 }
+      );
+    }
+
+    const repo = db.select().from(repos).where(eq(repos.id, repoId)).get();
+    if (!repo) {
+      return NextResponse.json({ error: 'Repo not found' }, { status: 404 });
+    }
+
+    db.update(repos)
+      .set({ active: active ? 1 : 0 })
+      .where(eq(repos.id, repoId))
+      .run();
+
+    const updated = db.select().from(repos).where(eq(repos.id, repoId)).get();
+    return NextResponse.json({ ...updated, active: !!updated!.active });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

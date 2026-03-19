@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,6 +19,7 @@ import { ScoreGauge } from '@/components/score-gauge';
 import { FindingsTable } from '@/components/findings-table';
 import { PromptOutput } from '@/components/prompt-output';
 import { ScanProgress } from '@/components/scan-progress';
+import { AuditProgress } from '@/components/audit-progress';
 import { ModuleScoreCard } from '@/components/module-score-card';
 import { HotspotQuadrant } from '@/components/hotspot-quadrant';
 import { RadarChart } from '@/components/radar-chart';
@@ -27,7 +29,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
-import { Loader2, Play, Sparkles, ShieldAlert, ClipboardCopy, Check, Download, FileText, Globe } from 'lucide-react';
+import { Loader2, Play, Sparkles, ShieldAlert, ClipboardCopy, Check, Download, FileText, Globe, Search, GitCompareArrows } from 'lucide-react';
 
 interface RepoData {
   id: string;
@@ -82,6 +84,44 @@ interface EvaluationResult {
   verdict: EvaluationVerdict;
   reasons: string[];
 }
+
+interface AuditFinding {
+  severity: string;
+  file: string;
+  line?: number;
+  message: string;
+  category: string;
+}
+
+interface AuditModule {
+  id: string;
+  moduleId: string;
+  summary: string;
+  findings: AuditFinding[];
+  tokensUsed: number | null;
+  durationMs: number | null;
+}
+
+interface AuditDetail {
+  audit: {
+    id: string;
+    repoId: string;
+    provider: string;
+    model: string | null;
+    status: string;
+    durationMs: number | null;
+    createdAt: string;
+  };
+  modules: AuditModule[];
+}
+
+type AuditProvider = 'claude-api' | 'claude-cli' | 'codex';
+
+const PROVIDER_LABELS: Record<AuditProvider, string> = {
+  'claude-api': 'Claude API',
+  'claude-cli': 'Claude CLI',
+  codex: 'Codex',
+};
 
 function formatDuration(ms: number | null | undefined): string {
   if (!ms) return '--';
@@ -341,6 +381,13 @@ export default function RepoPage() {
   const [activeScanId, setActiveScanId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
+  // Audit state
+  const [auditLoading, setAuditLoading] = React.useState(false);
+  const [activeAuditId, setActiveAuditId] = React.useState<string | null>(null);
+  const [auditProvider, setAuditProvider] = React.useState<AuditProvider>('claude-api');
+  const [auditDetail, setAuditDetail] = React.useState<AuditDetail | null>(null);
+  const [auditProviderCount, setAuditProviderCount] = React.useState(0);
+
   const isEvaluation = repo?.mode === 'evaluating';
 
   const fetchData = React.useCallback(async () => {
@@ -374,6 +421,37 @@ export default function RepoPage() {
           }));
           setScanDetail({ ...data, modules: enrichedModules });
         }
+      }
+
+      // Fetch latest audit for this repo and count distinct completed providers
+      try {
+        const auditsRes = await fetch('/api/audits');
+        if (auditsRes.ok) {
+          const allAudits = await auditsRes.json();
+          const repoAudits = allAudits.filter(
+            (a: { repoId: string }) => a.repoId === currentRepo.id
+          );
+
+          // Count distinct providers with completed audits
+          const completedProviders = new Set(
+            repoAudits
+              .filter((a: { status: string }) => a.status === 'completed')
+              .map((a: { provider: string }) => a.provider)
+          );
+          setAuditProviderCount(completedProviders.size);
+
+          // Load the latest audit detail
+          const latestAudit = repoAudits[0];
+          if (latestAudit) {
+            const auditRes = await fetch(`/api/audits/${latestAudit.id}`);
+            if (auditRes.ok) {
+              const data: AuditDetail = await auditRes.json();
+              setAuditDetail(data);
+            }
+          }
+        }
+      } catch {
+        // Non-critical — audit data is supplementary
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -410,6 +488,11 @@ export default function RepoPage() {
 
   const handleScanComplete = () => {
     setActiveScanId(null);
+    fetchData();
+  };
+
+  const handleAuditComplete = () => {
+    setActiveAuditId(null);
     fetchData();
   };
 
@@ -573,6 +656,60 @@ export default function RepoPage() {
                 : 'Scan Now'}
           </Button>
 
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="outline"
+                  disabled={auditLoading || !!activeAuditId}
+                >
+                  {auditLoading ? (
+                    <Loader2 className="size-4 animate-spin" data-icon="inline-start" />
+                  ) : (
+                    <Search className="size-4" data-icon="inline-start" />
+                  )}
+                  {auditLoading ? 'Starting...' : 'Audit'}
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end">
+              {(
+                ['claude-api', 'claude-cli', 'codex'] as AuditProvider[]
+              ).map((p) => (
+                <DropdownMenuItem
+                  key={p}
+                  onClick={() => {
+                    setAuditProvider(p);
+                    // Trigger audit immediately with selected provider
+                    setAuditLoading(true);
+                    setError(null);
+                    fetch('/api/audits', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ repoId: id, provider: p }),
+                    })
+                      .then((res) => res.json())
+                      .then((data) => {
+                        if (data.error) {
+                          setError(data.error);
+                        } else {
+                          setActiveAuditId(data.auditId);
+                        }
+                      })
+                      .catch((err) => {
+                        setError(
+                          err instanceof Error ? err.message : 'Network error'
+                        );
+                      })
+                      .finally(() => setAuditLoading(false));
+                  }}
+                >
+                  {PROVIDER_LABELS[p]}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           {scanDetail && (
             <Sheet>
               <SheetTrigger
@@ -647,6 +784,15 @@ export default function RepoPage() {
               </DropdownMenuContent>
             </DropdownMenu>
           )}
+
+          {(scanDetail || auditDetail) && (
+            <Link href={`/repo/${id}/comparison`}>
+              <Button variant="outline">
+                <GitCompareArrows className="size-4" data-icon="inline-start" />
+                Scan vs Audit
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -709,6 +855,18 @@ export default function RepoPage() {
           </CardHeader>
           <CardContent>
             <ScanProgress scanId={activeScanId} onComplete={handleScanComplete} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Active Audit Progress */}
+      {activeAuditId && (
+        <Card>
+          <CardHeader>
+            <CardTitle>AI Audit in Progress</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <AuditProgress auditId={activeAuditId} onComplete={handleAuditComplete} />
           </CardContent>
         </Card>
       )}
@@ -779,6 +937,132 @@ export default function RepoPage() {
         <section className="space-y-4">
           <h2 className="text-xl font-semibold">All Findings</h2>
           <FindingsTable findings={allFindings} />
+        </section>
+      )}
+
+      {/* Latest AI Audit Summary */}
+      {auditDetail && (
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-semibold">AI Audit</h2>
+              {auditProviderCount >= 2 && (
+                <Link href={`/repo/${id}/compare-audits`}>
+                  <Button variant="outline" size="sm">
+                    <GitCompareArrows className="size-4" data-icon="inline-start" />
+                    Compare Audits
+                  </Button>
+                </Link>
+              )}
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Badge variant="outline">
+                {PROVIDER_LABELS[auditDetail.audit.provider as AuditProvider] ??
+                  auditDetail.audit.provider}
+              </Badge>
+              <Badge
+                variant={
+                  auditDetail.audit.status === 'completed'
+                    ? 'default'
+                    : auditDetail.audit.status === 'failed'
+                      ? 'destructive'
+                      : 'secondary'
+                }
+              >
+                {auditDetail.audit.status}
+              </Badge>
+              {auditDetail.audit.durationMs && (
+                <span>{formatDuration(auditDetail.audit.durationMs)}</span>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {auditDetail.modules.map((mod) => {
+              const findingCount = mod.findings.length;
+              const severityCounts: Record<string, number> = {};
+              for (const f of mod.findings) {
+                severityCounts[f.severity] =
+                  (severityCounts[f.severity] ?? 0) + 1;
+              }
+
+              return (
+                <Card key={mod.id}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base capitalize">
+                      {mod.moduleId.replace(/-/g, ' ')}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {mod.summary && (
+                      <p className="text-sm text-muted-foreground">
+                        {mod.summary}
+                      </p>
+                    )}
+
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="secondary">
+                        {findingCount} finding
+                        {findingCount !== 1 ? 's' : ''}
+                      </Badge>
+                      {severityCounts.critical && (
+                        <Badge variant="destructive">
+                          {severityCounts.critical} critical
+                        </Badge>
+                      )}
+                      {severityCounts.high && (
+                        <Badge
+                          variant="destructive"
+                          className="bg-orange-600"
+                        >
+                          {severityCounts.high} high
+                        </Badge>
+                      )}
+                      {severityCounts.medium && (
+                        <Badge variant="secondary">
+                          {severityCounts.medium} medium
+                        </Badge>
+                      )}
+                    </div>
+
+                    {mod.findings.length > 0 && (
+                      <ul className="space-y-1 text-xs">
+                        {mod.findings.slice(0, 5).map((f, i) => (
+                          <li key={i} className="flex items-start gap-1.5">
+                            <span
+                              className={`mt-1 inline-block h-1.5 w-1.5 rounded-full shrink-0 ${
+                                f.severity === 'critical'
+                                  ? 'bg-red-500'
+                                  : f.severity === 'high'
+                                    ? 'bg-orange-500'
+                                    : f.severity === 'medium'
+                                      ? 'bg-yellow-500'
+                                      : 'bg-blue-400'
+                              }`}
+                            />
+                            <span className="text-muted-foreground">
+                              {f.file && (
+                                <span className="font-mono text-foreground">
+                                  {f.file}
+                                  {f.line ? `:${f.line}` : ''}
+                                </span>
+                              )}{' '}
+                              {f.message}
+                            </span>
+                          </li>
+                        ))}
+                        {mod.findings.length > 5 && (
+                          <li className="text-muted-foreground">
+                            ...and {mod.findings.length - 5} more
+                          </li>
+                        )}
+                      </ul>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
         </section>
       )}
 

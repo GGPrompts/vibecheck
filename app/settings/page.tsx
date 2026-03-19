@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Eye, EyeOff, Plus, Trash2, Check, X, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Plus, Trash2, Check, X, Loader2, FolderSearch, RotateCcw, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -137,11 +137,54 @@ export default function SettingsPage() {
   const [globalTier, setGlobalTier] = useState<string>("sonnet");
   const [moduleTiers, setModuleTiers] = useState<Record<string, string>>({});
 
+  // Scan directories
+  const [scanDirs, setScanDirs] = useState<string[]>([]);
+  const [scanDirsDefault, setScanDirsDefault] = useState(true);
+  const [newScanDir, setNewScanDir] = useState("");
+  const [savingScanDirs, setSavingScanDirs] = useState(false);
+  const [scanDirsSaved, setScanDirsSaved] = useState(false);
+
+  // Audit prompts
+  const [auditPrompts, setAuditPrompts] = useState<
+    Record<string, { moduleId: string; name: string; prompt: string; isCustom: boolean }>
+  >({});
+  const [auditPromptsLoading, setAuditPromptsLoading] = useState(true);
+  const [savingPrompts, setSavingPrompts] = useState(false);
+  const [promptsSaved, setPromptsSaved] = useState(false);
+
   // Add repo dialog
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newRepoPath, setNewRepoPath] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+
+  const fetchScanDirs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/settings/scan-dirs");
+      const data = await res.json();
+      if (Array.isArray(data.scanDirs)) {
+        setScanDirs(data.scanDirs);
+        setScanDirsDefault(data.isDefault ?? true);
+      }
+    } catch {
+      // Silently handle
+    }
+  }, []);
+
+  const fetchAuditPrompts = useCallback(async () => {
+    setAuditPromptsLoading(true);
+    try {
+      const res = await fetch("/api/settings/audit-prompts");
+      const data = await res.json();
+      if (data.prompts) {
+        setAuditPrompts(data.prompts);
+      }
+    } catch {
+      // Silently handle
+    } finally {
+      setAuditPromptsLoading(false);
+    }
+  }, []);
 
   const fetchRepos = useCallback(async () => {
     try {
@@ -192,8 +235,10 @@ export default function SettingsPage() {
   useEffect(() => {
     fetchSettings();
     fetchRepos();
+    fetchScanDirs();
+    fetchAuditPrompts();
     checkCliAvailability();
-  }, [fetchSettings, fetchRepos, checkCliAvailability]);
+  }, [fetchSettings, fetchRepos, fetchScanDirs, fetchAuditPrompts, checkCliAvailability]);
 
   async function handleSaveApiKey() {
     if (!apiKey.trim()) return;
@@ -251,6 +296,123 @@ export default function SettingsPage() {
       // Silently handle
     } finally {
       setSaving(false);
+    }
+  }
+
+  function handleAddScanDir() {
+    const dir = newScanDir.trim();
+    if (!dir) return;
+    if (scanDirs.includes(dir)) {
+      setNewScanDir("");
+      return;
+    }
+    setScanDirs((prev) => [...prev, dir]);
+    setScanDirsDefault(false);
+    setNewScanDir("");
+  }
+
+  function handleRemoveScanDir(dir: string) {
+    setScanDirs((prev) => prev.filter((d) => d !== dir));
+    setScanDirsDefault(false);
+  }
+
+  async function handleResetScanDirs() {
+    setSavingScanDirs(true);
+    try {
+      // Save empty scanDirs to reset to defaults
+      const res = await fetch("/api/settings/scan-dirs", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scanDirs: [] }),
+      });
+      if (res.ok) {
+        await fetchScanDirs();
+      }
+    } catch {
+      // Silently handle
+    } finally {
+      setSavingScanDirs(false);
+    }
+  }
+
+  async function handleSaveScanDirs() {
+    setSavingScanDirs(true);
+    setScanDirsSaved(false);
+    try {
+      const res = await fetch("/api/settings/scan-dirs", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scanDirs }),
+      });
+      if (res.ok) {
+        setScanDirsSaved(true);
+        setScanDirsDefault(false);
+        setTimeout(() => setScanDirsSaved(false), 3000);
+      }
+    } catch {
+      // Silently handle
+    } finally {
+      setSavingScanDirs(false);
+    }
+  }
+
+  function handlePromptChange(moduleId: string, value: string) {
+    setAuditPrompts((prev) => ({
+      ...prev,
+      [moduleId]: {
+        ...prev[moduleId],
+        prompt: value,
+        isCustom: true,
+      },
+    }));
+  }
+
+  async function handleResetPrompt(moduleId: string) {
+    // Fetch fresh defaults from the API by saving with an empty prompt for
+    // this module, then re-fetching
+    const currentPrompts = { ...auditPrompts };
+    // Set an empty string to signal "use default"
+    const promptsToSave: Record<string, string> = {};
+    for (const [id, entry] of Object.entries(currentPrompts)) {
+      if (id === moduleId) continue; // Skip the one being reset
+      promptsToSave[id] = entry.prompt;
+    }
+
+    try {
+      await fetch("/api/settings/audit-prompts", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompts: promptsToSave }),
+      });
+      await fetchAuditPrompts();
+    } catch {
+      // Silently handle
+    }
+  }
+
+  async function handleSavePrompts() {
+    setSavingPrompts(true);
+    setPromptsSaved(false);
+    try {
+      const promptsToSave: Record<string, string> = {};
+      for (const [moduleId, entry] of Object.entries(auditPrompts)) {
+        promptsToSave[moduleId] = entry.prompt;
+      }
+
+      const res = await fetch("/api/settings/audit-prompts", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompts: promptsToSave }),
+      });
+      if (res.ok) {
+        setPromptsSaved(true);
+        await fetchAuditPrompts();
+        setTimeout(() => setPromptsSaved(false), 3000);
+      }
+    } catch {
+      // Silently handle
+    } finally {
+      setSavingPrompts(false);
     }
   }
 
@@ -656,6 +818,182 @@ export default function SettingsPage() {
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>10K</span>
             <span>500K</span>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Separator />
+
+      {/* Audit Prompts */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            Audit Prompts
+          </CardTitle>
+          <CardDescription>
+            Customize the system prompts sent to the AI for each audit module.
+            Changes affect what the AI focuses on during audits.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {auditPromptsLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-24 rounded-lg bg-muted/50 animate-pulse" />
+              ))}
+            </div>
+          ) : Object.keys(auditPrompts).length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No audit modules available.
+            </p>
+          ) : (
+            <>
+              {Object.values(auditPrompts).map((entry) => (
+                <div
+                  key={entry.moduleId}
+                  className="space-y-2 rounded-lg border border-border p-4"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Label className="text-sm font-medium">
+                        {entry.name}
+                      </Label>
+                      {entry.isCustom && (
+                        <Badge variant="secondary">Custom</Badge>
+                      )}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleResetPrompt(entry.moduleId)}
+                      disabled={!entry.isCustom}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                      Reset to Default
+                    </Button>
+                  </div>
+                  <textarea
+                    value={entry.prompt}
+                    onChange={(e) =>
+                      handlePromptChange(entry.moduleId, e.target.value)
+                    }
+                    rows={4}
+                    className="w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 resize-y dark:bg-input/30"
+                  />
+                </div>
+              ))}
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={handleSavePrompts}
+                  disabled={savingPrompts}
+                  size="sm"
+                >
+                  {savingPrompts
+                    ? "Saving..."
+                    : promptsSaved
+                      ? "Saved!"
+                      : "Save All"}
+                </Button>
+                {promptsSaved && (
+                  <span className="text-sm text-muted-foreground">
+                    Audit prompts have been saved.
+                  </span>
+                )}
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Separator />
+
+      {/* Scan Directories */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FolderSearch className="h-5 w-5" />
+            Scan Directories
+            {scanDirsDefault && (
+              <Badge variant="secondary">Defaults</Badge>
+            )}
+          </CardTitle>
+          <CardDescription>
+            Directories to scan when discovering repositories. Vibecheck looks for
+            projects containing a <code className="text-xs">.git</code> folder or{" "}
+            <code className="text-xs">package.json</code>.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Current directories list */}
+          {scanDirs.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No scan directories configured.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {scanDirs.map((dir) => (
+                <div
+                  key={dir}
+                  className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2"
+                >
+                  <span className="text-sm font-mono truncate" title={dir}>
+                    {dir}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => handleRemoveScanDir(dir)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add new directory */}
+          <div className="flex gap-2">
+            <Input
+              placeholder="/home/user/projects"
+              value={newScanDir}
+              onChange={(e) => setNewScanDir(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleAddScanDir();
+              }}
+            />
+            <Button
+              onClick={handleAddScanDir}
+              disabled={!newScanDir.trim()}
+              size="sm"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Add
+            </Button>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={handleSaveScanDirs}
+              disabled={savingScanDirs}
+              size="sm"
+            >
+              {savingScanDirs
+                ? "Saving..."
+                : scanDirsSaved
+                  ? "Saved!"
+                  : "Save Directories"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleResetScanDirs}
+              disabled={savingScanDirs}
+            >
+              <RotateCcw className="h-3.5 w-3.5 mr-1" />
+              Reset to Defaults
+            </Button>
           </div>
         </CardContent>
       </Card>
