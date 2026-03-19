@@ -274,10 +274,16 @@ const runner: ModuleRunner = {
         }
 
         // Finding for very long files
-        if (analysis.loc > 500) {
-          const message = `File has ${analysis.loc} lines of code (threshold: 500)`;
+        // Adjust LOC threshold based on file role
+        const fileRolesForAnalysis = opts.fileRoles?.get(analysis.relativePath);
+        const isUiKit = fileRolesForAnalysis?.includes('ui-kit') ?? false;
+        const isApiRoute = fileRolesForAnalysis?.includes('api-route') ?? false;
+        const locThreshold = isApiRoute ? 800 : 500;
+
+        if (!isUiKit && analysis.loc > locThreshold) {
+          const message = `File has ${analysis.loc} lines of code (threshold: ${locThreshold})`;
           const severity =
-            analysis.loc > 1000 ? ('high' as const) : ('medium' as const);
+            analysis.loc > locThreshold * 2 ? ('high' as const) : ('medium' as const);
 
           const finding: Omit<Finding, 'id' | 'fingerprint'> = {
             severity,

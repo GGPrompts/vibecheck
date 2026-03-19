@@ -122,11 +122,18 @@ const runner: ModuleRunner = {
       }
     }
 
+    // Roles that should not produce unused-export warnings
+    const exportSkipRoles = new Set(['public-api', 'ui-kit', 'provider']);
+
     // Per-file issues
     if (knipData.issues) {
       for (const issue of knipData.issues) {
+        // Skip unused export warnings for files with exempt roles
+        const fileRolesForIssue = opts.fileRoles?.get(issue.file);
+        const skipExports = fileRolesForIssue?.some((r) => exportSkipRoles.has(r)) ?? false;
+
         // Unused exports
-        if (issue.exports) {
+        if (issue.exports && !skipExports) {
           for (const exp of issue.exports) {
             unusedExports++;
             const finding: Omit<Finding, 'id' | 'fingerprint'> = {
@@ -146,7 +153,7 @@ const runner: ModuleRunner = {
         }
 
         // Unused types
-        if (issue.types) {
+        if (issue.types && !skipExports) {
           for (const typ of issue.types) {
             unusedExports++;
             const finding: Omit<Finding, 'id' | 'fingerprint'> = {

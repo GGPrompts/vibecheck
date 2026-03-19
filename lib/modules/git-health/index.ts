@@ -433,11 +433,21 @@ const runner: ModuleRunner = {
     const allFindings: Finding[] = [];
     const metrics: Record<string, number> = {};
 
+    // Roles where bus-factor findings should be downgraded to info
+    const busFactorDowngradeRoles = new Set(['cli-entrypoint', 'mcp-tool', 'provider']);
+
     // 1. Bus factor (30%)
     opts.onProgress?.(5, 'Analyzing bus factor...');
     let authorDiversity = 1.0;
     try {
       const busFactor = await analyzeBusFactor(repoPath);
+      // Downgrade bus-factor severity for infrastructure files
+      for (const finding of busFactor.findings) {
+        const roles = opts.fileRoles?.get(finding.filePath);
+        if (roles?.some((r) => busFactorDowngradeRoles.has(r))) {
+          finding.severity = 'info';
+        }
+      }
       allFindings.push(...busFactor.findings);
       authorDiversity = busFactor.authorDiversity;
       metrics.busFactor = Math.round(authorDiversity * 100);

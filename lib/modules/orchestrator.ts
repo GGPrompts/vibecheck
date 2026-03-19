@@ -7,6 +7,7 @@ import { getEnabledModules, getAllModules } from './registry';
 import { computeOverallScore } from './scoring';
 import { readVibecheckRc, mergeWithRc } from '@/lib/config/vibecheckrc';
 import { getProfileConfig } from '@/lib/config/profiles';
+import { classifyFiles } from '@/lib/metadata/classifier';
 import type { ModuleResult } from './types';
 import type { RegisteredModule } from './types';
 
@@ -80,6 +81,10 @@ export async function runScan(
     const disableSet = new Set(disableModules);
     enabledModules = enabledModules.filter((m) => !disableSet.has(m.definition.id));
   }
+
+  // Classify files by role for context-aware module scoring
+  const fileRoles = classifyFiles(repoPath, rc ?? undefined);
+
   const resultSummaries: Array<{
     moduleId: string;
     score: number;
@@ -121,6 +126,7 @@ export async function runScan(
             message: msg,
           });
         },
+        fileRoles,
       });
 
       // Save module result to DB

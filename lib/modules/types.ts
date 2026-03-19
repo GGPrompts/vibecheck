@@ -15,6 +15,7 @@ export interface ModuleDefinition {
 export interface RunOptions {
   signal?: AbortSignal;
   onProgress?: (pct: number, msg: string) => void;
+  fileRoles?: Map<string, string[]>;
 }
 
 export interface Finding {
