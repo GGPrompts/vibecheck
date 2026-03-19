@@ -28,6 +28,9 @@ const vibecheckRcSchema = z.object({
 
   /** Custom audit prompt overrides per module ID. */
   auditPrompts: z.record(z.string(), z.string()).optional(),
+
+  /** Manual file-role classification overrides. Keys are relative paths or prefix globs. */
+  classify: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional(),
 });
 
 export type VibecheckRc = z.infer<typeof vibecheckRcSchema>;
