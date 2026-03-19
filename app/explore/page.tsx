@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Search, Loader2, Globe } from "lucide-react";
+import Link from "next/link";
+import { Search, Loader2, Globe, GitCompareArrows } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { GitHubRepoCard } from "@/components/github/repo-card";
@@ -187,20 +188,29 @@ export default function ExplorePage() {
       </div>
 
       {/* Search bar */}
-      <div className="relative max-w-2xl">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          ref={inputRef}
-          placeholder="Search repos or paste a GitHub URL..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          className="h-10 pl-9 pr-4"
-        />
-        {(loading || scanningUrl) && (
-          <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-        )}
+      <div className="flex items-center gap-3 max-w-2xl">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            ref={inputRef}
+            placeholder="Search repos or paste a GitHub URL..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            className="h-10 pl-9 pr-4"
+          />
+          {(loading || scanningUrl) && (
+            <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+          )}
+        </div>
+        <Link
+          href="/explore/compare"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 h-10 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors whitespace-nowrap shrink-0"
+        >
+          <GitCompareArrows className="h-4 w-4" />
+          Compare
+        </Link>
       </div>
 
       {/* Error */}
