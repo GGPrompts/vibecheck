@@ -36,7 +36,15 @@ const SEVERITY_WEIGHTS: Record<Severity, number> = {
 function computePriorityScore(finding: EnrichedFinding): number {
   const severityWeight = SEVERITY_WEIGHTS[finding.severity] ?? 1;
   const churnMultiplier = 1 + (finding.churnRate ?? 0);
-  return severityWeight * finding.confidence * churnMultiplier;
+
+  // Critical findings use a confidence floor of 0.5 so they are never
+  // suppressed too aggressively by low model confidence.
+  const effectiveConfidence =
+    finding.severity === 'critical'
+      ? Math.max(finding.confidence, 0.5)
+      : finding.confidence;
+
+  return severityWeight * effectiveConfidence * churnMultiplier;
 }
 
 /**

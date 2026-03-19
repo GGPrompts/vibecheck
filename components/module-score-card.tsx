@@ -1,8 +1,15 @@
 'use client';
 
 import Link from 'next/link';
+import { CheckCircle } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from '@/components/ui/tooltip';
 
 interface ModuleScoreCardProps {
   repoId: string;
@@ -24,6 +31,32 @@ function truncate(text: string, max = 60): string {
   return text.slice(0, max - 3) + '...';
 }
 
+function ConfidenceBadge({ confidence }: { confidence: number }) {
+  const pct = Math.round(confidence * 100);
+  const isStatic = confidence === 1.0;
+
+  if (isStatic) {
+    return (
+      <Badge
+        variant="secondary"
+        className="gap-1 bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400"
+      >
+        <CheckCircle className="size-3" />
+        100%
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge
+      variant="outline"
+      className="border-dashed text-muted-foreground"
+    >
+      {pct}%
+    </Badge>
+  );
+}
+
 export function ModuleScoreCard({
   repoId,
   moduleId,
@@ -32,15 +65,28 @@ export function ModuleScoreCard({
   confidence,
   top3Findings,
 }: ModuleScoreCardProps) {
-  const confidencePct = Math.round(confidence * 100);
-
   return (
     <Link href={`/repo/${repoId}/${moduleId}`} className="block">
       <Card className="h-full transition-colors hover:bg-muted/30">
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>{name}</CardTitle>
-            <Badge variant="secondary">{confidencePct}%</Badge>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <span className="cursor-default">
+                      <ConfidenceBadge confidence={confidence} />
+                    </span>
+                  }
+                />
+                <TooltipContent side="top" className="max-w-[240px]">
+                  {confidence === 1.0
+                    ? 'Static analysis: deterministic results.'
+                    : 'AI analysis: confidence reflects model certainty.'}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">

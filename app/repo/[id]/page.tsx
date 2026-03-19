@@ -19,6 +19,7 @@ import { PromptOutput } from '@/components/prompt-output';
 import { ScanProgress } from '@/components/scan-progress';
 import { ModuleScoreCard } from '@/components/module-score-card';
 import { HotspotQuadrant } from '@/components/hotspot-quadrant';
+import { RadarChart } from '@/components/radar-chart';
 import { Loader2, Play, Sparkles } from 'lucide-react';
 
 interface RepoData {
@@ -340,11 +341,38 @@ export default function RepoPage() {
         </section>
       )}
 
-      {/* Hotspot Quadrant */}
-      {hotspotData.length > 0 && (
+      {/* Radar Chart & Hotspot Quadrant (side by side on desktop) */}
+      {scanDetail && scanDetail.modules.length > 0 && (
         <section className="space-y-4">
-          <h2 className="text-xl font-semibold">Hotspot Quadrant</h2>
-          <HotspotQuadrant data={hotspotData} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Radar Chart */}
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold">Module Scores</h2>
+              <Card>
+                <CardContent className="pt-4">
+                  <RadarChart
+                    data={scanDetail.modules.map((mod) => ({
+                      moduleId: mod.moduleId,
+                      moduleName: mod.moduleId
+                        .split('-')
+                        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                        .join(' '),
+                      score: mod.score,
+                      confidence: mod.confidence,
+                    }))}
+                  />
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Hotspot Quadrant */}
+            {hotspotData.length > 0 && (
+              <div className="space-y-4">
+                <h2 className="text-xl font-semibold">Hotspot Quadrant</h2>
+                <HotspotQuadrant data={hotspotData} />
+              </div>
+            )}
+          </div>
         </section>
       )}
 
