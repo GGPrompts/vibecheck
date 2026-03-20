@@ -9,8 +9,8 @@ Three interchangeable providers implementing `AIProvider` interface (`providers/
 | Provider | How it works | Auth |
 |----------|-------------|------|
 | `claude-api` | Anthropic SDK, direct API calls | `ANTHROPIC_API_KEY` env var |
-| `claude-cli` | Spawns `claude -p` subprocess | Claude Max subscription |
-| `codex` | Spawns Codex CLI for cross-model audits | Codex CLI installed |
+| `claude-cli` | Spawns `claude -p`, pipes prompt via stdin, uses `--append-system-prompt` | Claude Max subscription |
+| `codex` | Spawns `codex exec --full-auto -`, pipes prompt via stdin | Codex Pro subscription |
 
 Provider selection: `client.ts` manages active provider. Tier config (`lib/config/tiers.ts`) determines which model is used per tier (Haiku for pro, Sonnet for max, Sonnet+Opus for max-x20).
 
@@ -22,7 +22,7 @@ Seven AI-powered scan modules in `lib/modules/` (naming-quality, doc-staleness, 
 
 Full AI audit flow in `lib/audit/`:
 
-- **runner.ts** — Orchestrates per-module AI audits. Selects high-value files (by size + directory diversity), sends to provider with module-specific prompts, parses findings. Respects tier model selection and coverage settings.
+- **runner.ts** — Orchestrates per-module AI audits. Two modes: **agentic** (CLI/Codex — gives repo path, lets the tool read files itself) and **embedded** (API — selects high-value files by size + directory diversity and embeds them in the prompt). Parses structured JSON findings. Respects tier model selection and coverage settings.
 - **prompts.ts** — 16 module-specific system prompts for audits (security, dependencies, complexity, git-health, dead-code, circular-deps, test-coverage, compliance, error-handling, config-quality, api-design, logging-quality, performance, resilience, onboarding, best-practices). Supports custom overrides from `.vibecheckrc` `auditPrompts` field.
 - **event-emitter.ts** — SSE event broadcasting for real-time audit progress.
 
