@@ -13,7 +13,7 @@ import type { AIProvider, AIResponse, AIQueryOptions } from './types';
 
 const execFileAsync = promisify(execFile);
 
-const DEFAULT_TIMEOUT_MS = 180_000; // 3 minutes — codex can be slower
+const DEFAULT_TIMEOUT_MS = 300_000; // 5 minutes — codex with high thinking needs at least as long as CLI
 
 /**
  * Check whether the `codex` binary exists on PATH.
