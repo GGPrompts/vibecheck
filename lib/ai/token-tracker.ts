@@ -1,7 +1,7 @@
 /**
  * Tracks token usage against a budget for AI analysis runs.
  */
-export class TokenTracker {
+class TokenTracker {
   private inputTokens = 0;
   private outputTokens = 0;
   private readonly budgetTokens: number;

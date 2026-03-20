@@ -14,7 +14,7 @@ export interface BatchProgress {
   results: Array<{ repoId: string; repoName: string; scanId?: string; error?: string }>;
 }
 
-export type BatchEventCallback = (progress: BatchProgress) => void;
+type BatchEventCallback = (progress: BatchProgress) => void;
 
 class BatchEventEmitter extends EventEmitter {
   emitProgress(batchId: string, progress: BatchProgress): void {

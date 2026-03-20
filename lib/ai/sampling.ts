@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'fs';
 import { join, relative, extname } from 'path';
 import type { ModuleResult } from '@/lib/modules/types';
 
-export interface SampledFile {
+interface SampledFile {
   filePath: string;
   reason: string;
   score: number;

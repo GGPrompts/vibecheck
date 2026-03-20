@@ -3,12 +3,12 @@
  * Prices are per million tokens (USD).
  */
 
-export interface ModelPricing {
+interface ModelPricing {
   input: number;
   output: number;
 }
 
-export const CLAUDE_PRICING: Record<string, ModelPricing> = {
+const CLAUDE_PRICING: Record<string, ModelPricing> = {
   haiku: { input: 0.25, output: 1.25 },
   sonnet: { input: 3.0, output: 15.0 },
   opus: { input: 15.0, output: 75.0 },

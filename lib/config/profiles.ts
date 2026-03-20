@@ -12,7 +12,7 @@
 
 export type ProjectProfile = 'solo' | 'team' | 'library' | 'prototype' | 'enterprise';
 
-export interface ProfileConfig {
+interface ProfileConfig {
   /** Enable/disable modules by id. `false` disables, `true` force-enables. */
   modules: Record<string, boolean>;
   /** Override scoring thresholds per module. */

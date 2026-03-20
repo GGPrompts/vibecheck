@@ -3,7 +3,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { basename, join, resolve } from 'path';
 import { homedir } from 'os';
 
-export interface DiscoveredRepo {
+interface DiscoveredRepo {
   /** Absolute path to the repository directory */
   path: string;
   /** Display name (from package.json name, or directory basename) */

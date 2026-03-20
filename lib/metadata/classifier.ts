@@ -4,7 +4,7 @@ import type { VibecheckRc } from '../config/vibecheckrc';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-export type FileRole =
+type FileRole =
   | 'api-route'
   | 'ui-kit'
   | 'barrel-file'

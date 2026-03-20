@@ -19,7 +19,7 @@ export interface PrioritizedFinding extends EnrichedFinding {
   priorityScore: number;
 }
 
-export interface FindingGroup {
+interface FindingGroup {
   filePath: string;
   findings: PrioritizedFinding[];
   groupScore: number;

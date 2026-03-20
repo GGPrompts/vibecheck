@@ -241,6 +241,8 @@ interface GraphRendererProps {
   healthMap: FileHealthMap;
   architecture: ArchitectureAnalysis | null;
   repoId?: string;
+  githubUrl?: string | null;
+  defaultBranch?: string;
 }
 
 export function GraphRenderer({
@@ -248,6 +250,8 @@ export function GraphRenderer({
   healthMap,
   architecture,
   repoId,
+  githubUrl,
+  defaultBranch = 'main',
 }: GraphRendererProps) {
   const nodeCount = serializedGraph.nodes.length;
   const edgeCount = serializedGraph.edges.length;
@@ -362,7 +366,7 @@ export function GraphRenderer({
       </SigmaContainer>
 
       {/* File sidebar renders outside SigmaContainer to overlay the canvas */}
-      <FileSidebar node={selectedNode} onClose={handleSidebarClose} />
+      <FileSidebar node={selectedNode} onClose={handleSidebarClose} githubUrl={githubUrl} defaultBranch={defaultBranch} />
     </div>
   );
 }

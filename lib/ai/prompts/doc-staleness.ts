@@ -12,7 +12,7 @@ export interface DocStalenessInput {
   packageJson?: string;
 }
 
-export interface DocFinding {
+interface DocFinding {
   filePath: string;
   line: number;
   message: string;
@@ -20,7 +20,7 @@ export interface DocFinding {
   suggestion: string;
 }
 
-export interface DocStalenessResponse {
+interface DocStalenessResponse {
   findings: DocFinding[];
 }
 

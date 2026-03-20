@@ -55,7 +55,7 @@ function getCurrentCommit(repoPath: string): string {
  * Runs only static modules (skips AI), enforces a 30-second timeout,
  * and appends the result to .vibecheck/commit-health.jsonl.
  */
-export async function takeSnapshot(repoPath: string): Promise<HealthSnapshot> {
+async function takeSnapshot(repoPath: string): Promise<HealthSnapshot> {
   // Import here to avoid circular dependency issues and ensure modules are registered
   const { runFastScan } = await import('@/lib/modules/orchestrator');
   await import('@/lib/modules/register-all');

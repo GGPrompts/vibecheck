@@ -7,7 +7,7 @@ import { homedir } from 'os';
 // Types
 // ---------------------------------------------------------------------------
 
-export interface CloneResult {
+interface CloneResult {
   path: string;
   sha: string;
   owner: string;

@@ -38,6 +38,8 @@ export default function MapPage() {
   const [graphData, setGraphData] = React.useState<SerializedGraph | null>(null);
   const [healthMap, setHealthMap] = React.useState<FileHealthMap>({});
   const [architecture, setArchitecture] = React.useState<ArchitectureAnalysis | null>(null);
+  const [githubUrl, setGithubUrl] = React.useState<string | null>(null);
+  const [defaultBranch, setDefaultBranch] = React.useState<string>('main');
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -54,11 +56,12 @@ export default function MapPage() {
 
         const refreshParam = refresh ? '?refresh=true' : '';
 
-        // Fetch all 3 APIs in parallel
-        const [graphRes, healthRes, archRes] = await Promise.allSettled([
+        // Fetch all 4 APIs in parallel
+        const [graphRes, healthRes, archRes, reposRes] = await Promise.allSettled([
           fetch(`/api/repos/${id}/graph${refreshParam}`),
           fetch(`/api/repos/${id}/file-health`),
           fetch(`/api/repos/${id}/architecture${refreshParam}`),
+          fetch('/api/repos'),
         ]);
 
         // Process graph (required)
@@ -88,6 +91,21 @@ export default function MapPage() {
           setArchitecture(archJson.analysis);
         } else {
           setArchitecture(null);
+        }
+
+        // Extract GitHub URL from repo metadata (optional)
+        if (reposRes.status === 'fulfilled' && reposRes.value.ok) {
+          try {
+            const allRepos = await reposRes.value.json();
+            const repo = allRepos.find((r: { id: string }) => r.id === id);
+            if (repo?.metadata) {
+              const meta = typeof repo.metadata === 'string' ? JSON.parse(repo.metadata) : repo.metadata;
+              if (meta?.github) setGithubUrl(meta.github);
+              if (meta?.defaultBranch) setDefaultBranch(meta.defaultBranch);
+            }
+          } catch {
+            // Non-critical — GitHub links just won't appear
+          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load graph data');
@@ -174,6 +192,8 @@ export default function MapPage() {
               healthMap={healthMap}
               architecture={architecture}
               repoId={id}
+              githubUrl={githubUrl}
+              defaultBranch={defaultBranch}
             />
           </React.Suspense>
         )}

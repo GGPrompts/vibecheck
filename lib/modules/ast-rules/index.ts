@@ -20,7 +20,7 @@ import type { ModuleRunner, ModuleResult, RunOptions, Finding, Severity } from '
  *   suggestion - Recommended fix (optional)
  *   category  - Grouping category (e.g., 'code-quality', 'security', 'performance')
  */
-export interface YamlRule {
+interface YamlRule {
   id: string;
   name: string;
   pattern: string;

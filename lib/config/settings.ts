@@ -5,7 +5,7 @@ import { homedir } from 'os';
 const VIBECHECK_DIR = join(homedir(), '.vibecheck');
 const CONFIG_PATH = join(VIBECHECK_DIR, 'config.json');
 
-export interface Settings {
+interface Settings {
   scanDirs?: string[];
   auditPrompts?: Record<string, string>;
   tier?: 'pro' | 'max' | 'max-x20' | 'api';

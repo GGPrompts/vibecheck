@@ -5,7 +5,7 @@
  * that executives and compliance teams can act on.
  */
 
-export interface BusinessRisk {
+interface BusinessRisk {
   label: string;
   color: string;
   urgency: string;
@@ -63,21 +63,6 @@ export function mapToBusinessRisk(severity: string): BusinessRisk {
     color: '#6b7280',
     urgency: 'Unknown',
   };
-}
-
-/**
- * Set custom overrides for risk mapping.
- * Merged on top of defaults — only overridden keys are replaced.
- */
-export function setRiskOverrides(overrides: Partial<Record<string, BusinessRisk>>): void {
-  overrideMap = { ...overrides };
-}
-
-/**
- * Reset overrides back to defaults.
- */
-export function clearRiskOverrides(): void {
-  overrideMap = {};
 }
 
 /**

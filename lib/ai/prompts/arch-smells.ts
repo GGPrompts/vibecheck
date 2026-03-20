@@ -16,7 +16,7 @@ export interface ArchSmellsInput {
   projectStructure: string[];
 }
 
-export interface ArchFinding {
+interface ArchFinding {
   filePath: string;
   line: number;
   message: string;
@@ -24,7 +24,7 @@ export interface ArchFinding {
   suggestion: string;
 }
 
-export interface ArchSmellsResponse {
+interface ArchSmellsResponse {
   findings: ArchFinding[];
 }
 

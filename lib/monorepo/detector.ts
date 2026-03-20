@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join, resolve, basename } from 'path';
 
-export interface Workspace {
+interface Workspace {
   /** Absolute path to the workspace directory */
   path: string;
   /** Display name (from workspace package.json name, or directory basename) */

@@ -51,7 +51,7 @@ function isBlocking(findings: PrioritizedFinding[]): boolean {
   );
 }
 
-export function evalComplexityTemplate(findings: PrioritizedFinding[]): EvaluationPromptSection {
+function evalComplexityTemplate(findings: PrioritizedFinding[]): EvaluationPromptSection {
   const filePath = findings[0].filePath;
   const details = findings.map((f) => `- ${locationString(f)}: ${f.message}`);
   const effort = estimateEffort(findings);
@@ -79,7 +79,7 @@ export function evalComplexityTemplate(findings: PrioritizedFinding[]): Evaluati
   };
 }
 
-export function evalSecurityTemplate(findings: PrioritizedFinding[]): EvaluationPromptSection {
+function evalSecurityTemplate(findings: PrioritizedFinding[]): EvaluationPromptSection {
   const filePath = findings[0].filePath;
   const details = findings.map((f) => `- ${locationString(f)}: ${f.message}`);
   const effort = estimateEffort(findings);
@@ -120,7 +120,7 @@ export function evalSecurityTemplate(findings: PrioritizedFinding[]): Evaluation
   };
 }
 
-export function evalDependencyTemplate(findings: PrioritizedFinding[]): EvaluationPromptSection {
+function evalDependencyTemplate(findings: PrioritizedFinding[]): EvaluationPromptSection {
   const filePath = findings[0].filePath;
   const details = findings.map((f) => `- ${f.message}`);
   const effort = estimateEffort(findings);
@@ -148,7 +148,7 @@ export function evalDependencyTemplate(findings: PrioritizedFinding[]): Evaluati
   };
 }
 
-export function evalGitHealthTemplate(findings: PrioritizedFinding[]): EvaluationPromptSection {
+function evalGitHealthTemplate(findings: PrioritizedFinding[]): EvaluationPromptSection {
   const filePath = findings[0].filePath;
   const details = findings.map((f) => `- ${locationString(f)}: ${f.message}`);
   const effort = estimateEffort(findings);
@@ -176,7 +176,7 @@ export function evalGitHealthTemplate(findings: PrioritizedFinding[]): Evaluatio
   };
 }
 
-export function evalGenericTemplate(findings: PrioritizedFinding[]): EvaluationPromptSection {
+function evalGenericTemplate(findings: PrioritizedFinding[]): EvaluationPromptSection {
   const filePath = findings[0].filePath;
   const details = findings.map((f) => `- ${locationString(f)}: ${f.message}`);
   const effort = estimateEffort(findings);

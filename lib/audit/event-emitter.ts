@@ -8,7 +8,7 @@ export interface AuditProgress {
   message: string;
 }
 
-export class AuditEventEmitter extends EventEmitter {
+class AuditEventEmitter extends EventEmitter {
   emitProgress(progress: AuditProgress): void {
     this.emit('progress', progress);
   }

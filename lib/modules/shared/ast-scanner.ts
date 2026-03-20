@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync } from 'fs';
 import { join, extname } from 'path';
 
 /** File extensions to scan, mapped to ast-grep Lang enum values */
-export const EXTENSION_TO_LANG: Record<string, string> = {
+const EXTENSION_TO_LANG: Record<string, string> = {
   '.ts': 'TypeScript',
   '.tsx': 'Tsx',
   '.js': 'JavaScript',
@@ -10,7 +10,7 @@ export const EXTENSION_TO_LANG: Record<string, string> = {
   '.py': 'Python',
 };
 
-export const SCANNABLE_EXTENSIONS = new Set(Object.keys(EXTENSION_TO_LANG));
+const SCANNABLE_EXTENSIONS = new Set(Object.keys(EXTENSION_TO_LANG));
 
 /** Directories to skip during file walking */
 const SKIP_DIRS = new Set([
@@ -27,7 +27,7 @@ const SKIP_DIRS = new Set([
 /**
  * Recursively collect source files from a directory.
  */
-export function collectSourceFiles(dir: string): string[] {
+function collectSourceFiles(dir: string): string[] {
   const files: string[] = [];
 
   let entries: string[];
@@ -78,13 +78,13 @@ export function tryLoadAstGrep(): typeof import('@ast-grep/napi') | null {
  * Both compliance rules and YAML-based custom rules satisfy this interface
  * through TypeScript's structural typing.
  */
-export interface ScanRule {
+interface ScanRule {
   id: string;
   pattern: string;
   language: string;
 }
 
-export interface ScanMatch {
+interface ScanMatch {
   filePath: string;
   relativePath: string;
   line: number;

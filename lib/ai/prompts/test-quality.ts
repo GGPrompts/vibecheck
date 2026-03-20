@@ -16,7 +16,7 @@ export interface TestQualityInput {
   }>;
 }
 
-export interface TestFinding {
+interface TestFinding {
   filePath: string;
   line: number;
   message: string;
@@ -24,7 +24,7 @@ export interface TestFinding {
   suggestion: string;
 }
 
-export interface TestQualityResponse {
+interface TestQualityResponse {
   findings: TestFinding[];
 }
 

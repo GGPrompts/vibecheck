@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { X, FileCode, ArrowUpRight, ArrowDownLeft, Layers, Zap } from 'lucide-react';
+import { X, FileCode, ArrowUpRight, ArrowDownLeft, Layers, Zap, ExternalLink, GitBranch, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { FileHealthData } from '@/lib/visualizer/file-health';
@@ -24,6 +24,8 @@ export interface SelectedNodeData {
 interface FileSidebarProps {
   node: SelectedNodeData | null;
   onClose: () => void;
+  githubUrl?: string | null;
+  defaultBranch?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -63,7 +65,7 @@ function severityBadgeColor(severity: string): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export function FileSidebar({ node, onClose }: FileSidebarProps) {
+export function FileSidebar({ node, onClose, githubUrl, defaultBranch = 'main' }: FileSidebarProps) {
   const panelRef = React.useRef<HTMLDivElement>(null);
 
   // Close on click outside
@@ -126,6 +128,39 @@ export function FileSidebar({ node, onClose }: FileSidebarProps) {
                 <X className="size-3.5" />
               </Button>
             </div>
+
+            {/* GitHub Links */}
+            {githubUrl && (
+              <div className="flex gap-1.5">
+                <a
+                  href={`${githubUrl}/blob/${defaultBranch}/${node.filePath}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  <ExternalLink className="size-3" />
+                  View
+                </a>
+                <a
+                  href={`${githubUrl}/blame/${defaultBranch}/${node.filePath}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  <GitBranch className="size-3" />
+                  Blame
+                </a>
+                <a
+                  href={`${githubUrl}/commits/${defaultBranch}/${node.filePath}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  <History className="size-3" />
+                  History
+                </a>
+              </div>
+            )}
 
             {/* Health Score */}
             {node.health && (

@@ -13,8 +13,10 @@ CLI (bin/vibecheck.mjs)
 Module Orchestrator (lib/modules/orchestrator.ts)
   |-- Static modules: security, dependencies, complexity, git-health,
   |                    dead-code, circular-deps, test-coverage,
-  |                    compliance, ast-rules, api-health
-  |-- AI modules:     naming-quality, doc-staleness, arch-smells, test-quality
+  |                    compliance, ast-rules, api-health,
+  |                    type-safety, secrets-scan, config-quality
+  |-- AI modules:     naming-quality, doc-staleness, arch-smells, test-quality,
+  |                    doc-accuracy, context-conflicts, error-handling
   |
   v
 SQLite DB (drizzle-orm + better-sqlite3)
@@ -34,7 +36,7 @@ MCP Server (mcp-server/) — 4 tools for Claude Code integration
 
 ## Key Concepts
 
-- **Modules** — 14 analysis modules (static + AI). Each has `canRun()`, `run()`, returns score 0-100 with findings. Registered in `lib/modules/register-all.ts`.
+- **Modules** — 20 analysis modules (static + AI). Each has `canRun()`, `run()`, returns score 0-100 with findings. Registered in `lib/modules/register-all.ts`.
 - **Profiles** — Project type presets (solo/team/library/prototype/enterprise) that adjust module enables + thresholds. Defined in `lib/config/profiles.ts`.
 - **Tiers** — Scan depth presets (pro/max/max-x20/api) controlling model selection, parallelism, and coverage. Defined in `lib/config/tiers.ts`.
 - **File Roles** — Auto-detected file classifications (api-route, ui-kit, barrel-file, etc.) that adjust scoring per module. Built by `lib/metadata/classifier.ts`.

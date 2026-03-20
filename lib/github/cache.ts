@@ -4,7 +4,7 @@ import type { GitHubMetadata } from './metadata';
 // Types
 // ---------------------------------------------------------------------------
 
-export interface CachedGitHubScan {
+interface CachedGitHubScan {
   scanId: string;
   repoId: string;
   metadata: GitHubMetadata;

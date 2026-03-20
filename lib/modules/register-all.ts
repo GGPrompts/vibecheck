@@ -36,3 +36,13 @@ import './rust-dependencies';
 import './rust-complexity';
 import './rust-dead-code';
 import './rust-test-coverage';
+
+// New static modules
+import './type-safety';
+import './secrets-scan';
+import './config-quality';
+
+// New AI-powered modules
+import './doc-accuracy';
+import './context-conflicts';
+import './error-handling';

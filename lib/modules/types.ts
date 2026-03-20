@@ -2,7 +2,7 @@ export type ModuleCategory = 'static' | 'ai';
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 
-export type FindingStatus = 'new' | 'recurring' | 'fixed' | 'regressed';
+type FindingStatus = 'new' | 'recurring' | 'fixed' | 'regressed';
 
 export interface ModuleDefinition {
   id: string;

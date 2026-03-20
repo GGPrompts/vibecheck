@@ -9,7 +9,7 @@ export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-export interface PromptDetails {
+interface PromptDetails {
   tokens: number;
   costs: CostEstimate;
 }
@@ -17,7 +17,7 @@ export interface PromptDetails {
 /**
  * Estimate token count and per-model costs for a given prompt string.
  */
-export function estimatePromptDetails(prompt: string): PromptDetails {
+function estimatePromptDetails(prompt: string): PromptDetails {
   const tokens = estimateTokens(prompt);
   const costs = estimatePromptCost(tokens);
   return { tokens, costs };

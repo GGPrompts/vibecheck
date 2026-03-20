@@ -1,6 +1,6 @@
 # Module System
 
-14 analysis modules that scan repos and produce scored findings.
+20 analysis modules that scan repos and produce scored findings.
 
 ## Module Registry
 
@@ -51,6 +51,9 @@ interface ModuleResult {
 | test-coverage | coverage JSON/LCOV | Line/branch/function coverage |
 | compliance | ast-grep | HIPAA and custom structural rules |
 | ast-rules | ast-grep | User-defined YAML pattern rules |
+| type-safety | ts-morph | `any` usage, tsconfig strict flags, type assertions, ts-ignore directives |
+| secrets-scan | regex + entropy | Hardcoded API keys, tokens, passwords, private keys, connection strings |
+| config-quality | parsers | tsconfig, package.json, eslint, gitignore, env, Dockerfile, CI config |
 
 ### Runtime (defaultEnabled: false)
 | ID | Tool | What it checks |
@@ -64,6 +67,9 @@ interface ModuleResult {
 | doc-staleness | Documentation freshness vs code |
 | arch-smells | God objects, layer violations, feature envy |
 | test-quality | Weak assertions, missing edge cases |
+| doc-accuracy | Checks if docs match actual code structure |
+| context-conflicts | Finds contradictions between CLAUDE.md, README, comments, code |
+| error-handling | Empty catches, swallowed errors, missing cleanup, resource leaks |
 
 ## Adding a New Module
 

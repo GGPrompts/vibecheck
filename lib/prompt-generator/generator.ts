@@ -19,7 +19,7 @@ import type { Severity } from '@/lib/modules/types';
 
 const MAX_FINDING_GROUPS = 10;
 
-export interface GeneratePromptResult {
+interface GeneratePromptResult {
   prompt: string;
   estimated_tokens: number;
 }

@@ -82,7 +82,7 @@ export function generateScoreGauge(score: number, size = 200): string {
 // Module Scores Bar Chart
 // ---------------------------------------------------------------------------
 
-export interface ModuleScoreEntry {
+interface ModuleScoreEntry {
   moduleId: string;
   score: number;
 }
@@ -136,7 +136,7 @@ ${rows.join('\n')}
 // Severity Breakdown — horizontal stacked bar
 // ---------------------------------------------------------------------------
 
-export interface SeverityCount {
+interface SeverityCount {
   severity: string;
   count: number;
   color: string;

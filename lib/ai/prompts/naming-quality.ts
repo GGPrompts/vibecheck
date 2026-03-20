@@ -12,7 +12,7 @@ export interface NamingQualityInput {
   language: string;
 }
 
-export interface NamingFinding {
+interface NamingFinding {
   filePath: string;
   line: number;
   message: string;
@@ -20,7 +20,7 @@ export interface NamingFinding {
   suggestion: string;
 }
 
-export interface NamingQualityResponse {
+interface NamingQualityResponse {
   findings: NamingFinding[];
 }
 

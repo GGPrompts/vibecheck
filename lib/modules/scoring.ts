@@ -30,26 +30,3 @@ export function computeOverallScore(
   return Math.round(weightedSum / totalWeight);
 }
 
-/**
- * Returns a color label based on score thresholds.
- * - 'green' if score > 70
- * - 'yellow' if score >= 40 and <= 70
- * - 'red' if score < 40
- */
-export function getScoreColor(score: number): string {
-  if (score > 70) return 'green';
-  if (score >= 40) return 'yellow';
-  return 'red';
-}
-
-/**
- * Returns a human-readable label based on score thresholds.
- * - 'Healthy' if score > 70
- * - 'Needs Attention' if score >= 40 and <= 70
- * - 'Critical' if score < 40
- */
-export function getScoreLabel(score: number): string {
-  if (score > 70) return 'Healthy';
-  if (score >= 40) return 'Needs Attention';
-  return 'Critical';
-}

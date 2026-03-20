@@ -9,10 +9,6 @@ export function registerModule(
   modules.set(definition.id, { definition, runner });
 }
 
-export function getModule(id: string): RegisteredModule | undefined {
-  return modules.get(id);
-}
-
 export function getAllModules(): RegisteredModule[] {
   return Array.from(modules.values());
 }

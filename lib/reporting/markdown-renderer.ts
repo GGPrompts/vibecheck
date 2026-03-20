@@ -18,7 +18,7 @@ import {
 // Module scores table
 // ---------------------------------------------------------------------------
 
-export interface MdModuleTableOptions {
+interface MdModuleTableOptions {
   showFindings?: boolean;
 }
 

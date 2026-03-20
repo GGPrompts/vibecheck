@@ -18,7 +18,7 @@ export interface GitHubMetadata {
   pushed_at: string;
 }
 
-export interface GitHubSearchResult {
+interface GitHubSearchResult {
   full_name: string;
   owner: string;
   repo: string;

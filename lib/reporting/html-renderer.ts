@@ -102,7 +102,7 @@ export function htmlDocClose(): string {
 // Header
 // ---------------------------------------------------------------------------
 
-export interface HeaderMeta {
+interface HeaderMeta {
   label: string;
   value: string;
   cssClass?: string;
@@ -151,7 +151,7 @@ export function renderHtmlTopRisks(risks: FindingRow[]): string {
 // Module scores table
 // ---------------------------------------------------------------------------
 
-export interface ModuleRowOptions {
+interface ModuleRowOptions {
   showFindings?: boolean;
 }
 
