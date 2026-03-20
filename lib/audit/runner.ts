@@ -327,10 +327,14 @@ export async function runAudit(
 
   const tierConfig: TierConfig = getTierConfig(resolvedTier);
 
-  // CLI provider reads files itself — skip file collection for it.
-  // API/Codex providers need files embedded in the prompt.
+  // CLI and Codex providers use agentic mode — they have filesystem access,
+  // so give them the repo path and let them read files themselves.
+  const isAgenticProvider = opts.provider === 'claude-cli' || opts.provider === 'codex';
+
+  // Agentic providers read files themselves — skip file collection.
+  // API provider needs files embedded in the prompt.
   let files: Array<{ path: string; content: string }> = [];
-  if (opts.provider !== 'claude-cli') {
+  if (!isAgenticProvider) {
     const maxFiles = tierConfig.coverage === 'sampled' ? 10 : MAX_AUDIT_FILES;
     files = selectFilesForAudit(repoPath, maxFiles);
     if (files.length === 0) {
@@ -343,10 +347,6 @@ export async function runAudit(
   }
 
   let moduleErrors = 0;
-
-  // CLI provider uses agentic mode — give it the repo path and let it
-  // read files itself, rather than embedding source code in the prompt.
-  const isCliProvider = opts.provider === 'claude-cli';
 
   for (const moduleId of requestedModules) {
     // Check for abort
@@ -378,7 +378,7 @@ export async function runAudit(
       let userPrompt: string;
       let systemPrompt: string;
 
-      if (isCliProvider) {
+      if (isAgenticProvider) {
         // Agentic mode: let Claude read files from the filesystem
         systemPrompt = customPrompts[moduleId] ?? promptTemplate.systemPrompt;
         userPrompt = buildCliAuditPrompt(repoPath, promptTemplate.name, systemPrompt);
