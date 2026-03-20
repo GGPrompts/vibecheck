@@ -33,7 +33,7 @@ async function claudeBinaryExists(): Promise<boolean> {
 /**
  * Run claude CLI with prompt piped via stdin to avoid ARG_MAX limits.
  */
-function runClaude(args: string[], prompt: string, timeoutMs: number): Promise<{ stdout: string; stderr: string }> {
+function runClaude(args: string[], prompt: string, timeoutMs: number, onChunk?: (chunk: string) => void): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn('claude', args, {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -48,7 +48,11 @@ function runClaude(args: string[], prompt: string, timeoutMs: number): Promise<{
       child.kill('SIGTERM');
     }, timeoutMs);
 
-    child.stdout.on('data', (data: Buffer) => { stdout += data.toString(); });
+    child.stdout.on('data', (data: Buffer) => {
+      const chunk = data.toString();
+      stdout += chunk;
+      onChunk?.(chunk);
+    });
     child.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
 
     child.on('error', (err) => {
@@ -102,7 +106,7 @@ export function createCliProvider(): AIProvider {
       }
 
       try {
-        const { stdout, stderr } = await runClaude(args, prompt, DEFAULT_TIMEOUT_MS);
+        const { stdout, stderr } = await runClaude(args, prompt, DEFAULT_TIMEOUT_MS, opts?.onChunk);
 
         const text = stdout.trim();
 

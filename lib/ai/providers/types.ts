@@ -18,6 +18,8 @@ export interface AIQueryOptions {
   model?: string;
   maxTokens?: number;
   system?: string;
+  /** Called with each chunk of output as it arrives from the provider. */
+  onChunk?: (chunk: string) => void;
 }
 
 export interface AIProvider {

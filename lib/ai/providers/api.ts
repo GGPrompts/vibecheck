@@ -84,6 +84,25 @@ export function createApiProvider(): AIProvider {
         params.system = opts.system;
       }
 
+      // Use streaming when an onChunk callback is provided
+      if (opts?.onChunk) {
+        const stream = client.messages.stream(params);
+        stream.on('text', (chunk) => {
+          opts.onChunk!(chunk);
+        });
+        const response = await stream.finalMessage();
+
+        const text =
+          response.content.find((c) => c.type === 'text')?.text ?? '';
+
+        return {
+          text,
+          inputTokens: response.usage.input_tokens,
+          outputTokens: response.usage.output_tokens,
+          model: response.model,
+        };
+      }
+
       const response = await client.messages.create(params);
 
       const text =
