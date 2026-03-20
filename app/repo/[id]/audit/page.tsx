@@ -12,6 +12,8 @@ import {
   Minus,
   ChevronDown,
   ChevronRight,
+  Play,
+  Square,
 } from 'lucide-react';
 import {
   Card,
@@ -22,6 +24,7 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { AuditStream } from '@/components/audit-stream';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -150,56 +153,106 @@ export default function AuditPage({
   const [error, setError] = useState<string | null>(null);
   const [expandedScan, setExpandedScan] = useState<string | null>(null);
   const [exportingFormat, setExportingFormat] = useState<string | null>(null);
+  const [activeAuditId, setActiveAuditId] = useState<string | null>(null);
+  const [auditStarting, setAuditStarting] = useState(false);
 
   // Fetch scans and details
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        setLoading(true);
-        setError(null);
+  async function fetchData() {
+    try {
+      setLoading(true);
+      setError(null);
 
-        const scansRes = await fetch('/api/scans');
-        if (!scansRes.ok) throw new Error('Failed to fetch scans');
+      const scansRes = await fetch('/api/scans');
+      if (!scansRes.ok) throw new Error('Failed to fetch scans');
 
-        const allScans: Scan[] = await scansRes.json();
-        const repoScans = allScans
-          .filter((s) => s.repoId === id)
-          .sort(
-            (a, b) =>
-              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
-
-        setScans(repoScans);
-
-        // Fetch module details for completed scans
-        const detailsMap = new Map<string, ScanDetail>();
-        const detailPromises = repoScans
-          .filter((s) => s.status === 'completed')
-          .map(async (scan) => {
-            try {
-              const res = await fetch(`/api/scans/${scan.id}`);
-              if (res.ok) {
-                const detail: ScanDetail = await res.json();
-                detailsMap.set(scan.id, detail);
-              }
-            } catch {
-              // Skip failed detail fetches
-            }
-          });
-
-        await Promise.all(detailPromises);
-        setScanDetails(detailsMap);
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : 'Failed to load audit data'
+      const allScans: Scan[] = await scansRes.json();
+      const repoScans = allScans
+        .filter((s) => s.repoId === id)
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
-      } finally {
-        setLoading(false);
+
+      setScans(repoScans);
+
+      // Fetch module details for completed scans
+      const detailsMap = new Map<string, ScanDetail>();
+      const detailPromises = repoScans
+        .filter((s) => s.status === 'completed')
+        .map(async (scan) => {
+          try {
+            const res = await fetch(`/api/scans/${scan.id}`);
+            if (res.ok) {
+              const detail: ScanDetail = await res.json();
+              detailsMap.set(scan.id, detail);
+            }
+          } catch {
+            // Skip failed detail fetches
+          }
+        });
+
+      await Promise.all(detailPromises);
+      setScanDetails(detailsMap);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Failed to load audit data'
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  // Run a new audit
+  async function handleRunAudit() {
+    setAuditStarting(true);
+    try {
+      const res = await fetch('/api/audits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repoId: id, provider: 'claude-cli' }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to start audit');
       }
+
+      const data = await res.json();
+      setActiveAuditId(data.auditId);
+    } catch (err) {
+      console.error('Failed to start audit:', err);
+    } finally {
+      setAuditStarting(false);
+    }
+  }
+
+  // Stop a running audit
+  async function handleStopAudit() {
+    if (!activeAuditId) return;
+
+    try {
+      await fetch(`/api/audits/${activeAuditId}/control`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'stop' }),
+      });
+    } catch (err) {
+      console.error('Failed to stop audit:', err);
     }
 
+    setActiveAuditId(null);
+  }
+
+  // Handle audit stream completion
+  function handleAuditComplete() {
+    setActiveAuditId(null);
     fetchData();
-  }, [id]);
+  }
 
   // Build audit entries with deltas
   const auditEntries: AuditEntry[] = useMemo(() => {
@@ -343,8 +396,27 @@ export default function AuditPage({
           </p>
         </div>
 
-        {/* Export buttons */}
+        {/* Action buttons */}
         <div className="flex gap-2 mt-6">
+          {activeAuditId ? (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleStopAudit}
+            >
+              <Square className="h-4 w-4 mr-1.5" />
+              Stop Audit
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              onClick={handleRunAudit}
+              disabled={auditStarting}
+            >
+              <Play className="h-4 w-4 mr-1.5" />
+              {auditStarting ? 'Starting...' : 'Run Audit'}
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -365,6 +437,37 @@ export default function AuditPage({
           </Button>
         </div>
       </div>
+
+      {/* Live audit stream */}
+      {activeAuditId && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Live Audit</CardTitle>
+                <CardDescription>
+                  Streaming output from AI audit
+                </CardDescription>
+              </div>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleStopAudit}
+              >
+                <Square className="h-4 w-4 mr-1.5" />
+                Stop
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <AuditStream
+              auditId={activeAuditId}
+              isActive={true}
+              onComplete={handleAuditComplete}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Empty state */}
       {scans.length === 0 && (
