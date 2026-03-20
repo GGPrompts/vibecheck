@@ -214,6 +214,41 @@ function parseAuditResponse(text: string): ParsedAuditResponse {
 }
 
 // ---------------------------------------------------------------------------
+// CLI agentic prompt builder
+// ---------------------------------------------------------------------------
+
+const JSON_FORMAT_INSTRUCTIONS = `
+Respond ONLY with a JSON object in this exact format (no markdown fences, no commentary):
+{
+  "summary": "Brief overall assessment (1-3 sentences)",
+  "findings": [
+    {
+      "severity": "critical" | "high" | "medium" | "low" | "info",
+      "file": "relative/path/to/file.ts",
+      "line": 42,
+      "message": "Description of the issue",
+      "category": "category-slug"
+    }
+  ]
+}
+If there are no findings, return an empty findings array.
+`.trim();
+
+/**
+ * Build a prompt for CLI-based audits. Instead of embedding files, give
+ * Claude the repo path and let it read files from the filesystem.
+ */
+function buildCliAuditPrompt(repoPath: string, auditName: string, roleDescription: string): string {
+  return `${roleDescription}
+
+Perform a "${auditName}" on the codebase located at: ${repoPath}
+
+Read the source files you need to analyze. Focus on the most important files — entry points, core logic, API routes, and configuration. Skip node_modules, build outputs, and generated files.
+
+${JSON_FORMAT_INSTRUCTIONS}`;
+}
+
+// ---------------------------------------------------------------------------
 // Main audit runner
 // ---------------------------------------------------------------------------
 
@@ -292,19 +327,26 @@ export async function runAudit(
 
   const tierConfig: TierConfig = getTierConfig(resolvedTier);
 
-  // Select high-value files for review (from CODE, not from scan results).
-  // Tier coverage controls how many files: sampled = top 10, full = default MAX_AUDIT_FILES.
-  const maxFiles = tierConfig.coverage === 'sampled' ? 10 : MAX_AUDIT_FILES;
-  const files = selectFilesForAudit(repoPath, maxFiles);
-  if (files.length === 0) {
-    db.update(audits)
-      .set({ status: 'failed', durationMs: Date.now() - startTime })
-      .where(eq(audits.id, auditId))
-      .run();
-    throw new Error('No source files found in repository');
+  // CLI provider reads files itself — skip file collection for it.
+  // API/Codex providers need files embedded in the prompt.
+  let files: Array<{ path: string; content: string }> = [];
+  if (opts.provider !== 'claude-cli') {
+    const maxFiles = tierConfig.coverage === 'sampled' ? 10 : MAX_AUDIT_FILES;
+    files = selectFilesForAudit(repoPath, maxFiles);
+    if (files.length === 0) {
+      db.update(audits)
+        .set({ status: 'failed', durationMs: Date.now() - startTime })
+        .where(eq(audits.id, auditId))
+        .run();
+      throw new Error('No source files found in repository');
+    }
   }
 
   let moduleErrors = 0;
+
+  // CLI provider uses agentic mode — give it the repo path and let it
+  // read files itself, rather than embedding source code in the prompt.
+  const isCliProvider = opts.provider === 'claude-cli';
 
   for (const moduleId of requestedModules) {
     // Check for abort
@@ -333,15 +375,24 @@ export async function runAudit(
     const moduleStart = Date.now();
 
     try {
-      // Build the prompt from raw source code — no scan scores
-      const userPrompt = promptTemplate.buildUserPrompt(files);
+      let userPrompt: string;
+      let systemPrompt: string;
 
-      // Use custom system prompt if available, otherwise fall back to default
-      const systemPrompt = customPrompts[moduleId] ?? promptTemplate.systemPrompt;
+      if (isCliProvider) {
+        // Agentic mode: let Claude read files from the filesystem
+        systemPrompt = customPrompts[moduleId] ?? promptTemplate.systemPrompt;
+        userPrompt = buildCliAuditPrompt(repoPath, promptTemplate.name, systemPrompt);
+        // For CLI, the system instructions are embedded in the user prompt
+        systemPrompt = '';
+      } else {
+        // API/Codex mode: embed files in the prompt
+        userPrompt = promptTemplate.buildUserPrompt(files);
+        systemPrompt = customPrompts[moduleId] ?? promptTemplate.systemPrompt;
+      }
 
       // Send to AI provider — use tier's model selection
       const response = await provider.query(userPrompt, {
-        system: systemPrompt,
+        system: systemPrompt || undefined,
         maxTokens: 4096,
         model: tierConfig.models.default,
       });

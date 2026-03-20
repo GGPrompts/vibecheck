@@ -2,17 +2,18 @@
  * CLI provider — spawns `claude -p` as a child process.
  *
  * Free for Max subscribers. Does not track tokens or cost.
- * The `claude -p` command reads a prompt from its argument and writes
- * the response to stdout as plain text.
+ * Pipes the prompt via stdin to handle large prompts (audit prompts
+ * can include 15+ source files, easily exceeding OS arg limits).
  */
 
+import { spawn } from 'child_process';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { AIProvider, AIResponse, AIQueryOptions } from './types';
 
 const execFileAsync = promisify(execFile);
 
-const DEFAULT_TIMEOUT_MS = 60_000;
+const DEFAULT_TIMEOUT_MS = 120_000;
 
 /**
  * Check whether the `claude` binary exists on PATH.
@@ -27,6 +28,49 @@ async function claudeBinaryExists(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * Run claude CLI with prompt piped via stdin to avoid ARG_MAX limits.
+ */
+function runClaude(args: string[], prompt: string, timeoutMs: number): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('claude', args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+    let killed = false;
+
+    const timer = setTimeout(() => {
+      killed = true;
+      child.kill('SIGTERM');
+    }, timeoutMs);
+
+    child.stdout.on('data', (data: Buffer) => { stdout += data.toString(); });
+    child.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (killed) {
+        reject(Object.assign(new Error('timeout'), { killed: true }));
+      } else if (code !== 0) {
+        reject(Object.assign(new Error(`exited with code ${code}`), { code, stderr }));
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
+
+    // Pipe prompt via stdin
+    child.stdin.write(prompt);
+    child.stdin.end();
+  });
 }
 
 export function createCliProvider(): AIProvider {
@@ -44,23 +88,21 @@ export function createCliProvider(): AIProvider {
         throw new Error('claude CLI is not installed or not on PATH');
       }
 
-      // Build the command arguments.
-      // `claude -p` reads the prompt from the argument.
-      // Note: claude -p does not support model selection — it uses whatever
-      // the user's Max plan provides.
-      const args = ['-p', prompt];
+      // Build command arguments. Prompt is piped via stdin, not passed as arg.
+      const args = ['-p'];
 
-      // If a system prompt is provided, pass it via --system-prompt flag
+      // Append to Claude's default system prompt rather than replacing it
       if (opts?.system) {
-        args.push('--system-prompt', opts.system);
+        args.push('--append-system-prompt', opts.system);
+      }
+
+      // Support model selection if provided
+      if (opts?.model) {
+        args.push('--model', opts.model);
       }
 
       try {
-        const { stdout, stderr } = await execFileAsync('claude', args, {
-          timeout: DEFAULT_TIMEOUT_MS,
-          maxBuffer: 10 * 1024 * 1024, // 10 MB
-          encoding: 'utf-8',
-        });
+        const { stdout, stderr } = await runClaude(args, prompt, DEFAULT_TIMEOUT_MS);
 
         const text = stdout.trim();
 
@@ -70,10 +112,9 @@ export function createCliProvider(): AIProvider {
 
         return {
           text,
-          // CLI provider does not report token usage
           inputTokens: undefined,
           outputTokens: undefined,
-          model: undefined,
+          model: opts?.model ?? undefined,
         };
       } catch (err: unknown) {
         if (err && typeof err === 'object' && 'killed' in err && (err as { killed: boolean }).killed) {
@@ -85,7 +126,6 @@ export function createCliProvider(): AIProvider {
           if (code === 'ENOENT') {
             throw new Error('claude CLI is not installed or not on PATH');
           }
-          // Non-zero exit code
           const stderr = (err as { stderr?: string }).stderr ?? '';
           throw new Error(
             `claude CLI exited with code ${code}${stderr ? ': ' + stderr.trim() : ''}`
