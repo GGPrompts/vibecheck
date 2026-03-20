@@ -171,46 +171,67 @@ function createProvider(providerName: 'claude-api' | 'claude-cli' | 'codex'): AI
 // ---------------------------------------------------------------------------
 
 /**
+ * Extract JSON from AI response text.
+ * Handles markdown code fences, raw JSON, or JSON wrapped in narration.
+ */
+function extractJson(text: string): string | null {
+  // 1. Try markdown code fence
+  const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+  if (fenceMatch) return fenceMatch[1].trim();
+
+  // 2. Try raw JSON (entire text)
+  const trimmed = text.trim();
+  if (trimmed.startsWith('{')) return trimmed;
+
+  // 3. Find first { ... last } in the text (Claude may add narration around JSON)
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    return text.slice(firstBrace, lastBrace + 1);
+  }
+
+  return null;
+}
+
+/**
  * Parse the AI response into structured findings.
  * Handles JSON wrapped in markdown code fences, raw JSON, or malformed responses.
  */
 function parseAuditResponse(text: string): ParsedAuditResponse {
-  // Strip markdown code fences if present
-  let jsonStr = text.trim();
+  const jsonStr = extractJson(text);
 
-  const fenceMatch = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
-  if (fenceMatch) {
-    jsonStr = fenceMatch[1].trim();
-  }
+  if (jsonStr) {
+    try {
+      const parsed = JSON.parse(jsonStr);
 
-  try {
-    const parsed = JSON.parse(jsonStr);
+      const summary = typeof parsed.summary === 'string' ? parsed.summary : '';
+      const findings: AuditFinding[] = [];
 
-    const summary = typeof parsed.summary === 'string' ? parsed.summary : '';
-    const findings: AuditFinding[] = [];
-
-    if (Array.isArray(parsed.findings)) {
-      for (const f of parsed.findings) {
-        if (typeof f === 'object' && f !== null && typeof f.message === 'string') {
-          findings.push({
-            severity: typeof f.severity === 'string' ? f.severity : 'medium',
-            file: typeof f.file === 'string' ? f.file : '',
-            line: typeof f.line === 'number' ? f.line : undefined,
-            message: f.message,
-            category: typeof f.category === 'string' ? f.category : 'general',
-          });
+      if (Array.isArray(parsed.findings)) {
+        for (const f of parsed.findings) {
+          if (typeof f === 'object' && f !== null && typeof f.message === 'string') {
+            findings.push({
+              severity: typeof f.severity === 'string' ? f.severity : 'medium',
+              file: typeof f.file === 'string' ? f.file : '',
+              line: typeof f.line === 'number' ? f.line : undefined,
+              message: f.message,
+              category: typeof f.category === 'string' ? f.category : 'general',
+            });
+          }
         }
       }
-    }
 
-    return { summary, findings };
-  } catch {
-    // If parsing fails, return the raw text as summary with no structured findings
-    return {
-      summary: text.slice(0, 500),
-      findings: [],
-    };
+      return { summary, findings };
+    } catch {
+      // Fall through to raw-text fallback
+    }
   }
+
+  // If parsing fails, return the raw text as summary with no structured findings
+  return {
+    summary: text.slice(0, 1000),
+    findings: [],
+  };
 }
 
 // ---------------------------------------------------------------------------

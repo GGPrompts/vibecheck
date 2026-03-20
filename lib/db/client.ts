@@ -19,7 +19,7 @@ sqlite.exec(`CREATE TABLE IF NOT EXISTS _migrations (
   applied_at TEXT DEFAULT (datetime('now')) NOT NULL
 )`);
 
-const migrationsDir = join(__dirname, 'migrations');
+const migrationsDir = join(process.cwd(), 'lib', 'db', 'migrations');
 try {
   const files = readdirSync(migrationsDir)
     .filter((f) => f.endsWith('.sql'))
