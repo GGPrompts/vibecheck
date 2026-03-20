@@ -8,6 +8,13 @@ export interface AuditProgress {
   message: string;
 }
 
+export interface AuditChunk {
+  auditId: string;
+  moduleId: string;
+  type: 'chunk';
+  data: string;
+}
+
 class AuditEventEmitter extends EventEmitter {
   emitProgress(progress: AuditProgress): void {
     this.emit('progress', progress);
@@ -19,6 +26,18 @@ class AuditEventEmitter extends EventEmitter {
 
   offProgress(listener: (progress: AuditProgress) => void): void {
     this.off('progress', listener);
+  }
+
+  emitChunk(auditId: string, moduleId: string, data: string): void {
+    this.emit('chunk', { auditId, moduleId, type: 'chunk', data } satisfies AuditChunk);
+  }
+
+  onChunk(listener: (chunk: AuditChunk) => void): void {
+    this.on('chunk', listener);
+  }
+
+  offChunk(listener: (chunk: AuditChunk) => void): void {
+    this.off('chunk', listener);
   }
 }
 

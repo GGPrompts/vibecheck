@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { audits, auditResults } from '@/lib/db/schema';
 import { auditEvents } from '@/lib/audit/event-emitter';
-import type { AuditProgress } from '@/lib/audit/event-emitter';
+import type { AuditProgress, AuditChunk } from '@/lib/audit/event-emitter';
 
 /**
  * GET /api/audits/[id]/progress — SSE stream for audit progress events.
@@ -21,6 +21,7 @@ export async function GET(
   const alreadyDone = audit && (audit.status === 'completed' || audit.status === 'failed');
 
   let listenerRef: ((progress: AuditProgress) => void) | null = null;
+  let chunkListenerRef: ((chunk: AuditChunk) => void) | null = null;
 
   const stream = new ReadableStream({
     start(controller) {
@@ -69,16 +70,44 @@ export async function GET(
             auditEvents.offProgress(listenerRef);
             listenerRef = null;
           }
+          if (chunkListenerRef) {
+            auditEvents.offChunk(chunkListenerRef);
+            chunkListenerRef = null;
+          }
+        }
+      };
+
+      const chunkListener = (chunk: AuditChunk) => {
+        if (chunk.auditId !== auditId) return;
+
+        try {
+          controller.enqueue(encoder.encode(`event: chunk\ndata: ${chunk.data}\n\n`));
+        } catch {
+          // Stream closed, clean up
+          if (listenerRef) {
+            auditEvents.offProgress(listenerRef);
+            listenerRef = null;
+          }
+          if (chunkListenerRef) {
+            auditEvents.offChunk(chunkListenerRef);
+            chunkListenerRef = null;
+          }
         }
       };
 
       listenerRef = listener;
+      chunkListenerRef = chunkListener;
       auditEvents.onProgress(listener);
+      auditEvents.onChunk(chunkListener);
     },
     cancel() {
       if (listenerRef) {
         auditEvents.offProgress(listenerRef);
         listenerRef = null;
+      }
+      if (chunkListenerRef) {
+        auditEvents.offChunk(chunkListenerRef);
+        chunkListenerRef = null;
       }
     },
   });

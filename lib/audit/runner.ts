@@ -395,6 +395,9 @@ export async function runAudit(
         system: systemPrompt || undefined,
         maxTokens: 4096,
         model: tierConfig.models.default,
+        onChunk: (chunk: string) => {
+          auditEvents.emitChunk(auditId, moduleId, chunk);
+        },
       });
 
       // Parse the response
