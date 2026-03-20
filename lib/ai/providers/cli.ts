@@ -13,7 +13,7 @@ import type { AIProvider, AIResponse, AIQueryOptions } from './types';
 
 const execFileAsync = promisify(execFile);
 
-const DEFAULT_TIMEOUT_MS = 120_000;
+const DEFAULT_TIMEOUT_MS = 300_000; // 5 minutes — agentic audits need time to read files and reason
 
 /**
  * Check whether the `claude` binary exists on PATH.
