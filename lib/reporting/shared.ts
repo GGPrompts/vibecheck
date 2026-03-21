@@ -5,7 +5,7 @@
  * the main generator orchestrator.
  */
 
-import { mapToBusinessRisk, getSeverityLevels } from './risk-mapping';
+import { getSeverityLevels } from './risk-mapping';
 
 // ---------------------------------------------------------------------------
 // Types

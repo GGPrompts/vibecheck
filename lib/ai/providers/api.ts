@@ -42,7 +42,6 @@ function resolveApiKey(): string | undefined {
 }
 
 let cachedClient: Anthropic | null = null;
-let cachedApiKey: string | undefined;
 
 function getOrCreateClient(): Anthropic | null {
   if (cachedClient) return cachedClient;
@@ -50,7 +49,6 @@ function getOrCreateClient(): Anthropic | null {
   const apiKey = resolveApiKey();
   if (!apiKey) return null;
 
-  cachedApiKey = apiKey;
   cachedClient = new Anthropic({ apiKey });
   return cachedClient;
 }

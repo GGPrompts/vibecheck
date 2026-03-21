@@ -4,7 +4,7 @@ import * as React from 'react';
 import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import type { ArchLayer, ArchitectureAnalysis } from '@/lib/visualizer/architecture';
-import type { FilterState } from './filter-panel';
+// FilterState import removed — unused
 
 // ---------------------------------------------------------------------------
 // Constants

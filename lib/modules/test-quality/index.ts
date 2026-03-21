@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync } from 'fs';
-import { join, extname } from 'path';
+import { join } from 'path';
 import { nanoid } from 'nanoid';
 import { getProvider } from '@/lib/ai/client';
 import { getModelForModule } from '@/lib/ai/model-routing';

@@ -9,5 +9,5 @@ export { AuditPromptsCard } from "./audit-prompts-card";
 export { ScanDirsCard } from "./scan-dirs-card";
 export { RepositoriesCard } from "./repositories-card";
 export { useSettings } from "./use-settings";
-export type { Settings, Repo, AuditPromptEntry, ModelOverrides } from "./types";
-export { MODULE_LIST } from "./types";
+export type { Settings, Repo, AuditPromptEntry, ModelOverrides, ModuleInfo, ModuleGroup } from "./types";
+export { MODULE_GROUP_LABELS, MODULE_GROUP_ORDER } from "./types";

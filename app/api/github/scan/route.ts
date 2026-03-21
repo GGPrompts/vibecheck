@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { nanoid } from 'nanoid';
-import { eq } from 'drizzle-orm';
 import { parseGitHubRepo, cloneRepo } from '@/lib/github/cloner';
 import { getCachedResult, setCachedResult } from '@/lib/github/cache';
 import { fetchRepoMetadata } from '@/lib/github/metadata';

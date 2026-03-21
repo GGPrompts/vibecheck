@@ -24,7 +24,7 @@ interface ArchFinding {
   suggestion: string;
 }
 
-interface ArchSmellsResponse {
+interface _ArchSmellsResponse {
   findings: ArchFinding[];
 }
 

@@ -17,7 +17,7 @@ interface PromptDetails {
 /**
  * Estimate token count and per-model costs for a given prompt string.
  */
-function estimatePromptDetails(prompt: string): PromptDetails {
+export function estimatePromptDetails(prompt: string): PromptDetails {
   const tokens = estimateTokens(prompt);
   const costs = estimatePromptCost(tokens);
   return { tokens, costs };

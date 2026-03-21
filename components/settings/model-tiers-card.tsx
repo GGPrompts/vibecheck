@@ -10,9 +10,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { AI_MODULE_LIST, TIER_OPTIONS } from "./types";
+import type { ModuleInfo } from "./types";
+import { TIER_OPTIONS } from "./types";
 
 interface ModelTiersCardProps {
+  aiModules: ModuleInfo[];
   globalTier: string;
   moduleTiers: Record<string, string>;
   onGlobalTierChange: (value: string) => void;
@@ -20,6 +22,7 @@ interface ModelTiersCardProps {
 }
 
 export function ModelTiersCard({
+  aiModules,
   globalTier,
   moduleTiers,
   onGlobalTierChange,
@@ -60,7 +63,7 @@ export function ModelTiersCard({
             Override the global tier for individual AI modules. &quot;Use global&quot; inherits the global setting.
           </p>
           <div className="space-y-3 mt-2">
-            {AI_MODULE_LIST.map((mod) => (
+            {aiModules.map((mod) => (
               <div
                 key={mod.id}
                 className="flex items-center justify-between gap-4"

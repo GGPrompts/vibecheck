@@ -24,7 +24,7 @@ interface TestFinding {
   suggestion: string;
 }
 
-interface TestQualityResponse {
+interface _TestQualityResponse {
   findings: TestFinding[];
 }
 

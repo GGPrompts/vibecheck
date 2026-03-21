@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import type { Settings, Repo, AuditPromptEntry } from "./types";
-import { MODULE_LIST } from "./types";
+import type { Settings, Repo, AuditPromptEntry, ModuleInfo } from "./types";
 
 export function useSettings() {
   const [settings, setSettings] = useState<Settings>({
@@ -22,16 +21,18 @@ export function useSettings() {
   const [savingKey, setSavingKey] = useState(false);
   const [keySaved, setKeySaved] = useState(false);
 
-  // Module toggles (local state for form)
-  const [enabledModules, setEnabledModules] = useState<string[]>(
-    MODULE_LIST.map((m) => m.id)
-  );
+  // Registered modules fetched from API
+  const [allModules, setAllModules] = useState<ModuleInfo[]>([]);
+
+  // Module toggles (local state for form) — initialized empty, populated after fetch
+  const [enabledModules, setEnabledModules] = useState<string[]>([]);
+  const [modulesInitialized, setModulesInitialized] = useState(false);
 
   // Token budget
   const [tokenBudget, setTokenBudget] = useState(100000);
 
   // AI provider
-  const [aiProvider, setAiProvider] = useState<"api" | "cli" | "auto">("auto");
+  const [aiProvider, setAiProvider] = useState<"api" | "cli" | "auto" | "codex">("auto");
   const [cliAvailable, setCliAvailable] = useState<boolean | null>(null);
   const [checkingCli, setCheckingCli] = useState(false);
 
@@ -65,6 +66,30 @@ export function useSettings() {
   const [adding, setAdding] = useState(false);
 
   // --- Fetch functions ---
+
+  const fetchModules = useCallback(async () => {
+    try {
+      const res = await fetch("/api/modules");
+      const data = await res.json();
+      if (Array.isArray(data.modules)) {
+        setAllModules(data.modules);
+        // Only set default enabled modules if we haven't loaded settings yet
+        if (!modulesInitialized) {
+          setEnabledModules((prev) => {
+            // If settings already populated enabledModules, keep those
+            if (prev.length > 0) return prev;
+            // Otherwise default to modules with defaultEnabled: true
+            return data.modules
+              .filter((m: ModuleInfo) => m.defaultEnabled)
+              .map((m: ModuleInfo) => m.id);
+          });
+          setModulesInitialized(true);
+        }
+      }
+    } catch {
+      // Silently handle
+    }
+  }, [modulesInitialized]);
 
   const fetchScanDirs = useCallback(async () => {
     try {
@@ -143,12 +168,13 @@ export function useSettings() {
   }, []);
 
   useEffect(() => {
+    fetchModules();
     fetchSettings();
     fetchRepos();
     fetchScanDirs();
     fetchAuditPrompts();
     checkCliAvailability();
-  }, [fetchSettings, fetchRepos, fetchScanDirs, fetchAuditPrompts, checkCliAvailability]);
+  }, [fetchModules, fetchSettings, fetchRepos, fetchScanDirs, fetchAuditPrompts, checkCliAvailability]);
 
   // --- Handlers ---
 
@@ -380,6 +406,7 @@ export function useSettings() {
     handleSaveApiKey,
 
     // Modules
+    allModules,
     enabledModules,
     toggleModule,
 

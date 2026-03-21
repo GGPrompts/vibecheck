@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { useMemo } from "react";
 import {
   ApiKeyCard,
   ProfileSelector,
@@ -18,6 +19,10 @@ import {
 
 export default function SettingsPage() {
   const s = useSettings();
+  const aiModules = useMemo(
+    () => s.allModules.filter((m) => m.group === "ai"),
+    [s.allModules]
+  );
 
   if (s.loading) {
     return (
@@ -84,6 +89,7 @@ export default function SettingsPage() {
       <Separator />
 
       <ModelTiersCard
+        aiModules={aiModules}
         globalTier={s.globalTier}
         moduleTiers={s.moduleTiers}
         onGlobalTierChange={s.setGlobalTier}
@@ -93,6 +99,7 @@ export default function SettingsPage() {
       <Separator />
 
       <ModuleTogglesCard
+        modules={s.allModules}
         enabledModules={s.enabledModules}
         onToggleModule={s.toggleModule}
       />

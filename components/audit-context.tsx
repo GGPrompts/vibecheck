@@ -131,6 +131,8 @@ export function AuditProvider({ children }: { children: ReactNode }) {
 
   // ── Flush pending blocks with 1s throttle via rAF ──
 
+  const scheduleFlushRef = useRef<() => void>(() => {});
+
   const scheduleFlush = useCallback(() => {
     if (rafIdRef.current !== null) return;
 
@@ -140,7 +142,7 @@ export function AuditProvider({ children }: { children: ReactNode }) {
 
       if (elapsed < 1000 && pendingBlocksRef.current.length > 0) {
         rafIdRef.current = null;
-        setTimeout(() => scheduleFlush(), 1000 - elapsed);
+        setTimeout(() => scheduleFlushRef.current(), 1000 - elapsed);
         return;
       }
 
@@ -155,6 +157,10 @@ export function AuditProvider({ children }: { children: ReactNode }) {
       rafIdRef.current = null;
     });
   }, []);
+
+  useEffect(() => {
+    scheduleFlushRef.current = scheduleFlush;
+  }, [scheduleFlush]);
 
   // ── Teardown helper ──
 

@@ -20,7 +20,7 @@ interface ErrorHandlingFinding {
   suggestion: string;
 }
 
-interface ErrorHandlingResponse {
+interface _ErrorHandlingResponse {
   findings: ErrorHandlingFinding[];
 }
 

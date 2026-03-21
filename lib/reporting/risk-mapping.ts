@@ -39,7 +39,7 @@ const DEFAULT_RISK_MAP: Record<string, BusinessRisk> = {
   },
 };
 
-let overrideMap: Partial<Record<string, BusinessRisk>> = {};
+const overrideMap: Partial<Record<string, BusinessRisk>> = {};
 
 /**
  * Map a technical severity string to business risk language.

@@ -471,7 +471,7 @@ function checkCiConfig(repoPath: string): Finding[] {
     if (existsSync(ciPath)) {
       // For directories (like .github/workflows), verify it contains files
       try {
-        const stat = readFileSync(ciPath, 'utf-8');
+        readFileSync(ciPath, 'utf-8');
         // If readFileSync succeeds, it's a file
         hasCi = true;
         break;

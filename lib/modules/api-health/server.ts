@@ -21,7 +21,7 @@ async function isServerReady(port: number): Promise<boolean> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
 
-    const response = await fetch(`http://localhost:${port}/`, {
+    await fetch(`http://localhost:${port}/`, {
       signal: controller.signal,
     });
 

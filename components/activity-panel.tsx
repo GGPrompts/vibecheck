@@ -50,18 +50,27 @@ export function ActivityPanel({
   const isDraggingRef = useRef(false)
   const dragStartYRef = useRef(0)
   const dragStartHeightRef = useRef(0)
+  const [lastAuditId, setLastAuditId] = useState<string | null>(null)
+
+  // Reset logs when a new audit starts — adjust state during render (React-recommended pattern)
+  if (activeAuditId !== lastAuditId) {
+    setLastAuditId(activeAuditId)
+    if (activeAuditId !== null) {
+      setLogs([])
+    }
+  }
+
+  // Reset block counter when audit changes
+  useEffect(() => {
+    prevBlockCountRef.current = 0
+  }, [activeAuditId])
 
   // Convert new blocks to log entries
   useEffect(() => {
     if (paused) return
+
     const newBlocks = blocks.slice(prevBlockCountRef.current)
-    if (newBlocks.length === 0) {
-      if (blocks.length < prevBlockCountRef.current) {
-        setLogs([])
-        prevBlockCountRef.current = 0
-      }
-      return
-    }
+    if (newBlocks.length === 0) return
     prevBlockCountRef.current = blocks.length
 
     const merged = mergeTextBlocks(newBlocks)

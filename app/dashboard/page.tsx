@@ -564,7 +564,7 @@ function RepoGrid({ repos, onScanComplete, onActiveToggle, onRemove }: { repos: 
               <MonorepoGroup
                 key={repo.id}
                 parent={repo}
-                children={children}
+                childRepos={children}
                 onScanComplete={onScanComplete}
                 onActiveToggle={onActiveToggle}
               />
@@ -591,19 +591,19 @@ function RepoGrid({ repos, onScanComplete, onActiveToggle, onRemove }: { repos: 
  */
 function MonorepoGroup({
   parent,
-  children,
+  childRepos,
   onScanComplete,
   onActiveToggle,
 }: {
   parent: Repo;
-  children: Repo[];
+  childRepos: Repo[];
   onScanComplete: () => void;
   onActiveToggle: (repoId: string, active: boolean) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
   // Compute aggregated score: average of all workspace scores that have been scanned
-  const scores = children
+  const scores = childRepos
     .map((c) => c.latestScan?.overallScore)
     .filter((s): s is number => s != null);
   const parentScore = parent.latestScan?.overallScore;
@@ -620,7 +620,7 @@ function MonorepoGroup({
               <Layers className="h-5 w-5 text-primary" />
               <span className="truncate font-bold">{parent.name}</span>
               <span className="text-xs text-muted-foreground font-normal">
-                monorepo &middot; {children.length} workspace{children.length === 1 ? "" : "s"}
+                monorepo &middot; {childRepos.length} workspace{childRepos.length === 1 ? "" : "s"}
               </span>
             </div>
             <div className="flex items-center gap-3">
@@ -659,7 +659,7 @@ function MonorepoGroup({
             onScanComplete={onScanComplete}
             onActiveToggle={onActiveToggle}
           />
-          {children.map((child) => (
+          {childRepos.map((child) => (
             <RepoHealthCard
               key={child.id}
               repo={child}

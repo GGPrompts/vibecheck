@@ -20,7 +20,7 @@ interface NamingFinding {
   suggestion: string;
 }
 
-interface NamingQualityResponse {
+interface _NamingQualityResponse {
   findings: NamingFinding[];
 }
 

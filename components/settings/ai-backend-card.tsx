@@ -11,11 +11,11 @@ import {
 } from "@/components/ui/card";
 
 interface AiBackendCardProps {
-  aiProvider: "api" | "cli" | "auto";
+  aiProvider: "api" | "cli" | "auto" | "codex";
   checkingCli: boolean;
   cliAvailable: boolean | null;
   hasApiKey: boolean;
-  onProviderChange: (value: "api" | "cli" | "auto") => void;
+  onProviderChange: (value: "api" | "cli" | "auto" | "codex") => void;
 }
 
 export function AiBackendCard({
@@ -109,6 +109,29 @@ export function AiBackendCard({
                 </>
               )}
             </div>
+          </div>
+        </button>
+
+        {/* Codex option */}
+        <button
+          type="button"
+          onClick={() => onProviderChange("codex")}
+          className={`w-full rounded-lg border p-4 text-left transition-colors ${
+            aiProvider === "codex"
+              ? "border-primary bg-primary/5"
+              : "border-border hover:border-muted-foreground/50"
+          }`}
+        >
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Codex</span>
+              {aiProvider === "codex" && (
+                <Badge variant="secondary">Selected</Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Uses <code className="text-xs">codex exec --full-auto</code> subprocess. Runs audits via OpenAI Codex. Requires a Codex Pro subscription.
+            </p>
           </div>
         </button>
 

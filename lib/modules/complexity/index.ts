@@ -1,4 +1,4 @@
-import { existsSync, statSync, readdirSync } from 'fs';
+import { statSync, readdirSync } from 'fs';
 import { join, relative } from 'path';
 import { Project, SyntaxKind, SourceFile, FunctionDeclaration, MethodDeclaration, ArrowFunction, FunctionExpression } from 'ts-morph';
 import { nanoid } from 'nanoid';
@@ -63,7 +63,6 @@ function collectSourceFiles(dir: string, files: string[] = []): string[] {
  */
 function calculateCyclomaticComplexity(node: FunctionLike): number {
   let complexity = 1;
-  const text = node.getText();
 
   // Count control flow keywords in the function text by walking descendants
   node.forEachDescendant((child) => {

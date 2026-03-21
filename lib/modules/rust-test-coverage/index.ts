@@ -26,7 +26,6 @@ const runner: ModuleRunner = {
 
     // Step 1: Run cargo test and parse results
     let testOutput = '';
-    let testsFailed = false;
     try {
       testOutput = execSync('cargo test 2>&1', {
         cwd: repoPath,
@@ -45,7 +44,6 @@ const runner: ModuleRunner = {
         typeof (error as { stdout: unknown }).stdout === 'string'
       ) {
         testOutput = (error as { stdout: string }).stdout;
-        testsFailed = true;
       } else {
         const msg = error instanceof Error ? error.message : String(error);
         if (msg.includes('ENOENT') || msg.includes('not found') || msg.includes('not recognized')) {

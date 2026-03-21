@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { nanoid } from 'nanoid';
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, isNull } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { repos, scans, scanConfigs } from '@/lib/db/schema';
 import { runScan } from '@/lib/modules/orchestrator';
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     let config: ScanConfig | undefined;
     const savedConfig =
       db.select().from(scanConfigs).where(eq(scanConfigs.repoId, repoId)).get() ??
-      db.select().from(scanConfigs).limit(1).get();
+      db.select().from(scanConfigs).where(isNull(scanConfigs.repoId)).limit(1).get();
 
     if (savedConfig) {
       config = {

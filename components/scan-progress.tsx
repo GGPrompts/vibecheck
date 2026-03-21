@@ -17,7 +17,9 @@ interface ScanProgressProps {
 export function ScanProgress({ scanId, onComplete }: ScanProgressProps) {
   const [modules, setModules] = useState<Record<string, ModuleProgress>>({});
   const onCompleteRef = useRef(onComplete);
-  onCompleteRef.current = onComplete;
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
     const eventSource = new EventSource(`/api/scans/${scanId}/progress`);

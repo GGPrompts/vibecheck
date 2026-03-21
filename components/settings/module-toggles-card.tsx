@@ -9,17 +9,32 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { MODULE_LIST } from "./types";
+import type { ModuleInfo, ModuleGroup } from "./types";
+import { MODULE_GROUP_LABELS, MODULE_GROUP_ORDER } from "./types";
 
 interface ModuleTogglesCardProps {
+  modules: ModuleInfo[];
   enabledModules: string[];
   onToggleModule: (moduleId: string) => void;
 }
 
 export function ModuleTogglesCard({
+  modules,
   enabledModules,
   onToggleModule,
 }: ModuleTogglesCardProps) {
+  // Group modules by their UI group
+  const grouped = MODULE_GROUP_ORDER.reduce(
+    (acc, group) => {
+      const mods = modules.filter((m) => m.group === group);
+      if (mods.length > 0) {
+        acc.push({ group, mods });
+      }
+      return acc;
+    },
+    [] as { group: ModuleGroup; mods: ModuleInfo[] }[]
+  );
+
   return (
     <Card>
       <CardHeader>
@@ -28,24 +43,36 @@ export function ModuleTogglesCard({
           Enable or disable individual analysis modules for scans.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {MODULE_LIST.map((mod) => (
-          <div
-            key={mod.id}
-            className="flex items-center justify-between gap-4"
-          >
-            <div className="space-y-0.5">
-              <Label className="text-sm font-medium">{mod.name}</Label>
-              <p className="text-xs text-muted-foreground">
-                {mod.description}
-              </p>
+      <CardContent className="space-y-6">
+        {grouped.map(({ group, mods }) => (
+          <div key={group} className="space-y-3">
+            <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              {MODULE_GROUP_LABELS[group]}
+            </h4>
+            <div className="space-y-3 pl-1">
+              {mods.map((mod) => (
+                <div
+                  key={mod.id}
+                  className="flex items-center justify-between gap-4"
+                >
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-medium">{mod.name}</Label>
+                    <p className="text-xs text-muted-foreground">
+                      {mod.description}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={enabledModules.includes(mod.id)}
+                    onCheckedChange={() => onToggleModule(mod.id)}
+                  />
+                </div>
+              ))}
             </div>
-            <Switch
-              checked={enabledModules.includes(mod.id)}
-              onCheckedChange={() => onToggleModule(mod.id)}
-            />
           </div>
         ))}
+        {modules.length === 0 && (
+          <p className="text-sm text-muted-foreground">Loading modules...</p>
+        )}
       </CardContent>
     </Card>
   );

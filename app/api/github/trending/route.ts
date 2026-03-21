@@ -131,16 +131,20 @@ export async function GET(request: Request) {
     const data = JSON.parse(raw);
     const items: unknown[] = Array.isArray(data.items) ? data.items : [];
 
-    const results: GitHubSearchResult[] = items.map((item: any) => ({
-      full_name: item.full_name ?? '',
-      owner: item.owner?.login ?? '',
-      repo: item.name ?? '',
-      description: item.description ?? null,
-      language: item.language ?? null,
-      stargazers_count: item.stargazers_count ?? 0,
-      forks_count: item.forks_count ?? 0,
-      pushed_at: item.pushed_at ?? '',
-    }));
+    const results: GitHubSearchResult[] = items.map((raw) => {
+      const item = raw as Record<string, unknown>;
+      const owner = item.owner as Record<string, unknown> | undefined;
+      return {
+        full_name: (item.full_name as string) ?? '',
+        owner: (owner?.login as string) ?? '',
+        repo: (item.name as string) ?? '',
+        description: (item.description as string) ?? null,
+        language: (item.language as string) ?? null,
+        stargazers_count: (item.stargazers_count as number) ?? 0,
+        forks_count: (item.forks_count as number) ?? 0,
+        pushed_at: (item.pushed_at as string) ?? '',
+      };
+    });
 
     // Update cache
     cache.set(category, { data: results, timestamp: Date.now() });

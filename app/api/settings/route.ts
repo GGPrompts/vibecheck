@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { eq } from 'drizzle-orm';
+import { eq, isNull } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { scanConfigs } from '@/lib/db/schema';
 import { readSettings, writeSettings } from '@/lib/config/settings';
@@ -10,14 +10,14 @@ import { hasApiKey, readEnvValue, writeEnvValue, writeApiKey } from '@/lib/confi
  */
 export async function GET() {
   try {
-    // Get the default config (repoId is null for global defaults)
-    const config = db.select().from(scanConfigs).limit(1).get();
+    // Get the global config (repoId is null for global defaults)
+    const config = db.select().from(scanConfigs).where(isNull(scanConfigs.repoId)).limit(1).get();
 
     const enabledModules = config?.enabledModules
       ? JSON.parse(config.enabledModules)
       : null;
 
-    const aiProvider = readEnvValue('VIBECHECK_AI_PROVIDER') as 'api' | 'cli' | undefined;
+    const aiProvider = readEnvValue('VIBECHECK_AI_PROVIDER') as 'api' | 'cli' | 'codex' | undefined;
 
     // Load model overrides from env
     let modelOverrides: { global?: string; modules?: Record<string, string> } | undefined;
@@ -73,7 +73,7 @@ export async function PUT(request: Request) {
       enabledModules?: string[];
       aiTokenBudget?: number;
       weights?: Record<string, number>;
-      aiProvider?: 'api' | 'cli' | 'auto';
+      aiProvider?: 'api' | 'cli' | 'auto' | 'codex';
       modelOverrides?: { global?: string; modules?: Record<string, string> };
       profile?: 'solo' | 'team' | 'library' | 'prototype' | 'enterprise';
       tier?: 'pro' | 'max' | 'max-x20' | 'api';
@@ -109,8 +109,8 @@ export async function PUT(request: Request) {
 
     // Handle scan config updates
     if (enabledModules !== undefined || aiTokenBudget !== undefined || weights !== undefined) {
-      // Look for existing default config
-      const existing = db.select().from(scanConfigs).limit(1).get();
+      // Look for existing global config (repoId is null)
+      const existing = db.select().from(scanConfigs).where(isNull(scanConfigs.repoId)).limit(1).get();
 
       if (existing) {
         const updates: Record<string, unknown> = {};

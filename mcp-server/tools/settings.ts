@@ -2,7 +2,7 @@
  * vibecheck_settings — get or set vibecheck configuration.
  */
 import { z } from 'zod';
-import { eq } from 'drizzle-orm';
+import { eq, isNull } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { scanConfigs } from '@/lib/db/schema';
 import { readSettings, writeSettings } from '@/lib/config/settings';
@@ -31,7 +31,7 @@ export const vibecheckSettingsInput = {
     .optional()
     .describe('AI token budget per scan (set only)'),
   aiProvider: z
-    .enum(['api', 'cli', 'auto'])
+    .enum(['api', 'cli', 'auto', 'codex'])
     .optional()
     .describe('AI provider selection (set only)'),
   modelOverrides: z
@@ -57,7 +57,7 @@ type SettingsArgs = {
 function getSettings(): ToolResponse {
   const configSettings = readSettings();
 
-  const config = db.select().from(scanConfigs).limit(1).get();
+  const config = db.select().from(scanConfigs).where(isNull(scanConfigs.repoId)).limit(1).get();
   const enabledModules = config?.enabledModules
     ? JSON.parse(config.enabledModules)
     : null;
@@ -125,7 +125,7 @@ function setSettings(args: SettingsArgs): ToolResponse {
 
 /** Upsert enabledModules and aiTokenBudget into the scanConfigs table. */
 function updateScanConfigs(enabledModules?: string[], aiTokenBudget?: number): void {
-  const existing = db.select().from(scanConfigs).limit(1).get();
+  const existing = db.select().from(scanConfigs).where(isNull(scanConfigs.repoId)).limit(1).get();
 
   if (existing) {
     const updates: Record<string, unknown> = {};

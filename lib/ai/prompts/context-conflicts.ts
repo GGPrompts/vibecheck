@@ -22,7 +22,7 @@ interface ContextConflictsFinding {
   suggestion: string;
 }
 
-interface ContextConflictsResponse {
+interface _ContextConflictsResponse {
   findings: ContextConflictsFinding[];
 }
 

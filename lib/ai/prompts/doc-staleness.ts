@@ -20,7 +20,7 @@ interface DocFinding {
   suggestion: string;
 }
 
-interface DocStalenessResponse {
+interface _DocStalenessResponse {
   findings: DocFinding[];
 }
 

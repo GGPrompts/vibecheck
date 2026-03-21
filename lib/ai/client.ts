@@ -1,3 +1,6 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 import type { AIProvider } from './providers/types';
 import { createApiProvider } from './providers/api';
 import { createCliProvider } from './providers/cli';
@@ -5,7 +8,7 @@ import { createCodexProvider } from './providers/codex';
 
 // ── Provider management ──────────────────────────────────────────
 
-let activeProviderName: 'api' | 'cli' | 'codex' | null = null;
+const activeProviderName: 'api' | 'cli' | 'codex' | null = null;
 let cachedProvider: AIProvider | null = null;
 
 /**
@@ -14,9 +17,6 @@ let cachedProvider: AIProvider | null = null;
 function getPersistedProvider(): 'api' | 'cli' | 'codex' | null {
   if (activeProviderName) return activeProviderName;
   try {
-    const { readFileSync } = require('fs');
-    const { join } = require('path');
-    const { homedir } = require('os');
     const envPath = join(homedir(), '.vibecheck', '.env');
     const content = readFileSync(envPath, 'utf-8');
     const match = content.match(/^VIBECHECK_AI_PROVIDER=(.+)$/m);

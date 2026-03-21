@@ -20,7 +20,7 @@ interface DocAccuracyFinding {
   suggestion: string;
 }
 
-interface DocAccuracyResponse {
+interface _DocAccuracyResponse {
   findings: DocAccuracyFinding[];
 }
 

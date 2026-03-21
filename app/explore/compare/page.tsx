@@ -28,108 +28,6 @@ export default function ComparePage() {
   const [inputError, setInputError] = useState<string | null>(null);
   const keyCounter = useRef(0);
 
-  // ------ Add repo ------
-
-  const addRepo = useCallback(
-    (owner: string, repo: string) => {
-      const alreadyAdded = repos.some(
-        (r) => r.owner.toLowerCase() === owner.toLowerCase() && r.repo.toLowerCase() === repo.toLowerCase(),
-      );
-      if (alreadyAdded) {
-        setInputError("This repo is already in the comparison.");
-        return;
-      }
-      if (repos.length >= MAX_REPOS) {
-        setInputError(`You can compare up to ${MAX_REPOS} repos at once.`);
-        return;
-      }
-
-      const key = `repo-${++keyCounter.current}`;
-      const entry: RepoEntry = {
-        key,
-        owner,
-        repo,
-        metadata: null,
-        scanResult: null,
-        loading: true,
-        scanning: false,
-        error: null,
-      };
-
-      setRepos((prev) => [...prev, entry]);
-      setInputValue("");
-      setInputError(null);
-
-      fetchRepoData(key, owner, repo);
-    },
-    [repos],
-  );
-
-  const handleAdd = useCallback(() => {
-    const parsed = parseOwnerRepo(inputValue);
-    if (!parsed) {
-      setInputError("Enter a valid GitHub URL or owner/repo (e.g. facebook/react)");
-      return;
-    }
-    addRepo(parsed.owner, parsed.repo);
-  }, [inputValue, addRepo]);
-
-  // ------ Remove repo ------
-
-  const removeRepo = useCallback((key: string) => {
-    setRepos((prev) => prev.filter((r) => r.key !== key));
-  }, []);
-
-  // ------ Fetch metadata & scan results ------
-
-  const fetchRepoData = useCallback(async (key: string, owner: string, repo: string) => {
-    try {
-      const res = await fetch(`/api/github/results/${owner}/${repo}`);
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        setRepos((prev) =>
-          prev.map((r) =>
-            r.key === key
-              ? { ...r, loading: false, error: data?.error || "Failed to fetch repo data" }
-              : r,
-          ),
-        );
-        return;
-      }
-
-      const data = await res.json();
-
-      let scanResult: ScanResult | null = null;
-      if (data.scanned && data.scanId) {
-        scanResult = await fetchScanDetails(data.scanId, data.overallScore, data.modules);
-      }
-
-      setRepos((prev) =>
-        prev.map((r) =>
-          r.key === key
-            ? {
-                ...r,
-                loading: false,
-                metadata: data.metadata ?? null,
-                scanResult,
-                scanning: data.scanning ?? false,
-              }
-            : r,
-        ),
-      );
-
-      if (data.scanning && data.scanId) {
-        pollForCompletion(key, owner, repo);
-      }
-    } catch {
-      setRepos((prev) =>
-        prev.map((r) =>
-          r.key === key ? { ...r, loading: false, error: "Network error" } : r,
-        ),
-      );
-    }
-  }, []);
-
   // ------ Fetch detailed scan (with findings) ------
 
   async function fetchScanDetails(
@@ -225,6 +123,108 @@ export default function ComparePage() {
     },
     [],
   );
+
+  // ------ Fetch metadata & scan results ------
+
+  const fetchRepoData = useCallback(async (key: string, owner: string, repo: string) => {
+    try {
+      const res = await fetch(`/api/github/results/${owner}/${repo}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setRepos((prev) =>
+          prev.map((r) =>
+            r.key === key
+              ? { ...r, loading: false, error: data?.error || "Failed to fetch repo data" }
+              : r,
+          ),
+        );
+        return;
+      }
+
+      const data = await res.json();
+
+      let scanResult: ScanResult | null = null;
+      if (data.scanned && data.scanId) {
+        scanResult = await fetchScanDetails(data.scanId, data.overallScore, data.modules);
+      }
+
+      setRepos((prev) =>
+        prev.map((r) =>
+          r.key === key
+            ? {
+                ...r,
+                loading: false,
+                metadata: data.metadata ?? null,
+                scanResult,
+                scanning: data.scanning ?? false,
+              }
+            : r,
+        ),
+      );
+
+      if (data.scanning && data.scanId) {
+        pollForCompletion(key, owner, repo);
+      }
+    } catch {
+      setRepos((prev) =>
+        prev.map((r) =>
+          r.key === key ? { ...r, loading: false, error: "Network error" } : r,
+        ),
+      );
+    }
+  }, [pollForCompletion]);
+
+  // ------ Remove repo ------
+
+  const removeRepo = useCallback((key: string) => {
+    setRepos((prev) => prev.filter((r) => r.key !== key));
+  }, []);
+
+  // ------ Add repo ------
+
+  const addRepo = useCallback(
+    (owner: string, repo: string) => {
+      const alreadyAdded = repos.some(
+        (r) => r.owner.toLowerCase() === owner.toLowerCase() && r.repo.toLowerCase() === repo.toLowerCase(),
+      );
+      if (alreadyAdded) {
+        setInputError("This repo is already in the comparison.");
+        return;
+      }
+      if (repos.length >= MAX_REPOS) {
+        setInputError(`You can compare up to ${MAX_REPOS} repos at once.`);
+        return;
+      }
+
+      const key = `repo-${++keyCounter.current}`;
+      const entry: RepoEntry = {
+        key,
+        owner,
+        repo,
+        metadata: null,
+        scanResult: null,
+        loading: true,
+        scanning: false,
+        error: null,
+      };
+
+      setRepos((prev) => [...prev, entry]);
+      setInputValue("");
+      setInputError(null);
+
+      fetchRepoData(key, owner, repo);
+    },
+    [repos, fetchRepoData],
+  );
+
+  const handleAdd = useCallback(() => {
+    const parsed = parseOwnerRepo(inputValue);
+    if (!parsed) {
+      setInputError("Enter a valid GitHub URL or owner/repo (e.g. facebook/react)");
+      return;
+    }
+    addRepo(parsed.owner, parsed.repo);
+  }, [inputValue, addRepo]);
 
   // ------ Trigger scan ------
 

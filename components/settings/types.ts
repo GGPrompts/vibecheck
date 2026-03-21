@@ -7,7 +7,7 @@ export interface Settings {
   hasApiKey: boolean;
   enabledModules: string[] | null;
   aiTokenBudget: number;
-  aiProvider: "api" | "cli" | "auto";
+  aiProvider: "api" | "cli" | "auto" | "codex";
   modelOverrides?: ModelOverrides | null;
   profile?: string;
   tier?: string;
@@ -32,34 +32,32 @@ export interface AuditPromptEntry {
   isCustom: boolean;
 }
 
-export const MODULE_LIST = [
-  {
-    id: "security",
-    name: "Security",
-    description: "Scans for common security vulnerabilities and exposed secrets.",
-  },
-  {
-    id: "dependencies",
-    name: "Dependencies",
-    description: "Checks for outdated, deprecated, or vulnerable packages.",
-  },
-  {
-    id: "complexity",
-    name: "Complexity",
-    description: "Analyzes code complexity metrics and identifies overly complex functions.",
-  },
-  {
-    id: "git-health",
-    name: "Git Health",
-    description: "Evaluates commit patterns, branch hygiene, and collaboration metrics.",
-  },
-];
+export type ModuleGroup = 'static' | 'ai' | 'runtime' | 'go-native' | 'rust-native';
 
-export const AI_MODULE_LIST = [
-  { id: "naming-quality", name: "Naming Quality" },
-  { id: "doc-staleness", name: "Doc Staleness" },
-  { id: "arch-smells", name: "Architecture Smells" },
-  { id: "test-quality", name: "Test Quality" },
+export interface ModuleInfo {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  defaultEnabled: boolean;
+  /** UI grouping derived from module id and category */
+  group: ModuleGroup;
+}
+
+export const MODULE_GROUP_LABELS: Record<ModuleGroup, string> = {
+  static: 'Static Analysis',
+  ai: 'AI-Powered',
+  runtime: 'Runtime',
+  'go-native': 'Go Native',
+  'rust-native': 'Rust Native',
+};
+
+export const MODULE_GROUP_ORDER: ModuleGroup[] = [
+  'static',
+  'ai',
+  'runtime',
+  'go-native',
+  'rust-native',
 ];
 
 export const TIER_OPTIONS = [

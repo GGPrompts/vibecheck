@@ -17,7 +17,9 @@ interface AuditProgressProps {
 export function AuditProgress({ auditId, onComplete }: AuditProgressProps) {
   const [modules, setModules] = useState<Record<string, ModuleProgress>>({});
   const onCompleteRef = useRef(onComplete);
-  onCompleteRef.current = onComplete;
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
     const eventSource = new EventSource(`/api/audits/${auditId}/progress`);

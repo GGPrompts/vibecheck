@@ -173,7 +173,6 @@ function analyzeCoverageSummary(
 
   // Overall score is the total line coverage percentage
   const overallPct = totalLines > 0 ? (coveredLines / totalLines) * 100 : 0;
-  const score = Math.round(Math.min(100, Math.max(0, overallPct)));
 
   // Use total entry if available for a more accurate overall
   const totalEntry = data.total;

@@ -1,9 +1,6 @@
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join, relative, sep } from 'path';
 
-/** HTTP methods that Next.js API routes can export */
-const HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'] as const;
-
 /** Regex to detect exported HTTP method handlers in a route file */
 const EXPORT_PATTERN = /export\s+(?:async\s+)?function\s+(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\b/g;
 

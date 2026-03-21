@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from 'fs';
-import { join, relative, extname } from 'path';
+import { execSync } from 'child_process';
+import { join, extname } from 'path';
 import { nanoid } from 'nanoid';
 import { registerModule } from '../registry';
 import { generateFingerprint } from '../fingerprint';
@@ -69,7 +70,6 @@ const SOURCE_EXTS = new Set([
 
 function collectSourceFiles(repoPath: string): string[] {
   const results: string[] = [];
-  const { execSync } = require('child_process');
 
   try {
     // Use git ls-files for speed and to respect .gitignore

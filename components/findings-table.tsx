@@ -9,7 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
+// Button import removed — unused
 import {
   CircleAlert,
   TriangleAlert,
@@ -22,8 +22,6 @@ import {
 import { cn } from '@/lib/utils';
 
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
-type FindingStatus = 'new' | 'recurring' | 'fixed' | 'regressed';
-
 interface FindingRow {
   id: string;
   severity: string;
@@ -98,6 +96,28 @@ function truncatePath(path: string | null, maxLen = 40): string {
   if (!path) return '(unknown)';
   if (path.length <= maxLen) return path;
   return '...' + path.slice(path.length - maxLen + 3);
+}
+
+function SortableHeader({
+  field,
+  onToggle,
+  children,
+}: {
+  field: SortField;
+  onToggle: (field: SortField) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <TableHead>
+      <button
+        className="inline-flex items-center gap-1 hover:text-foreground"
+        onClick={() => onToggle(field)}
+      >
+        {children}
+        <ArrowUpDown className="size-3 opacity-50" />
+      </button>
+    </TableHead>
+  );
 }
 
 export function FindingsTable({ findings }: FindingsTableProps) {
@@ -181,24 +201,6 @@ export function FindingsTable({ findings }: FindingsTableProps) {
     }
   };
 
-  const SortableHeader = ({
-    field,
-    children,
-  }: {
-    field: SortField;
-    children: React.ReactNode;
-  }) => (
-    <TableHead>
-      <button
-        className="inline-flex items-center gap-1 hover:text-foreground"
-        onClick={() => toggleSort(field)}
-      >
-        {children}
-        <ArrowUpDown className="size-3 opacity-50" />
-      </button>
-    </TableHead>
-  );
-
   return (
     <div className="space-y-4">
       {/* Filter controls */}
@@ -256,12 +258,12 @@ export function FindingsTable({ findings }: FindingsTableProps) {
       <Table>
         <TableHeader>
           <TableRow>
-            <SortableHeader field="severity">Severity</SortableHeader>
-            <SortableHeader field="filePath">File</SortableHeader>
-            <SortableHeader field="line">Line</SortableHeader>
-            <SortableHeader field="message">Message</SortableHeader>
-            <SortableHeader field="moduleId">Module</SortableHeader>
-            <SortableHeader field="status">Status</SortableHeader>
+            <SortableHeader field="severity" onToggle={toggleSort}>Severity</SortableHeader>
+            <SortableHeader field="filePath" onToggle={toggleSort}>File</SortableHeader>
+            <SortableHeader field="line" onToggle={toggleSort}>Line</SortableHeader>
+            <SortableHeader field="message" onToggle={toggleSort}>Message</SortableHeader>
+            <SortableHeader field="moduleId" onToggle={toggleSort}>Module</SortableHeader>
+            <SortableHeader field="status" onToggle={toggleSort}>Status</SortableHeader>
           </TableRow>
         </TableHeader>
         <TableBody>

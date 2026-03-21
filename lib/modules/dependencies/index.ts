@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { nanoid } from 'nanoid';
 import { registerModule } from '../registry';
@@ -127,7 +127,7 @@ const runner: ModuleRunner = {
     try {
       const pkgJsonPath = join(repoPath, 'package.json');
       const pkgJson = JSON.parse(
-        require('fs').readFileSync(pkgJsonPath, 'utf-8')
+        readFileSync(pkgJsonPath, 'utf-8')
       );
       totalDepsCount =
         Object.keys(pkgJson.dependencies ?? {}).length +

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, unlinkSync, chmodSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, unlinkSync, chmodSync, mkdirSync } from 'fs';
 import { join, resolve } from 'path';
 
 const HOOK_MARKER = '# vibecheck post-commit hook';
@@ -40,7 +40,6 @@ export function installHook(repoPath: string): { success: boolean; message: stri
     // Ensure hooks directory exists
     const hooksDir = join(gitDir, 'hooks');
     if (!existsSync(hooksDir)) {
-      const { mkdirSync } = require('fs');
       mkdirSync(hooksDir, { recursive: true });
     }
 

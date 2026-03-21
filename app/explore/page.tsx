@@ -62,7 +62,7 @@ export default function ExplorePage() {
 
   // Scan-via-URL state
   const [scanningUrl, setScanningUrl] = useState(false);
-  const [scanResult, setScanResult] = useState<{
+  const [_scanResult, setScanResult] = useState<{
     scanId: string;
     repoId: string;
     owner: string;
