@@ -48,11 +48,15 @@ class BatchEventEmitter extends EventEmitter {
   }
 }
 
-/** Global event emitter for batch SSE consumption. */
-export const batchEvents = new BatchEventEmitter();
+/** Global event emitter for batch SSE consumption. Survives HMR in dev mode. */
+const globalForBatch = globalThis as typeof globalThis & {
+  __batchEvents?: BatchEventEmitter;
+  __activeBatches?: Set<string>;
+};
+export const batchEvents = globalForBatch.__batchEvents ??= new BatchEventEmitter();
 
 /** Track active batch IDs so we can prevent duplicate batch runs. */
-const activeBatches = new Set<string>();
+const activeBatches = globalForBatch.__activeBatches ??= new Set<string>();
 
 /**
  * Run a batch scan across multiple repos sequentially.
