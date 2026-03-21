@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, use } from 'react';
+import { useEffect, useState, useMemo, useCallback, use } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -25,6 +25,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AuditStream } from '@/components/audit-stream';
+import { useAudit } from '@/components/audit-context';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -145,6 +146,8 @@ export default function AuditPage({
 }) {
   const { id } = use(params);
 
+  const { activeAuditId, isStreaming, startAudit, stopAudit: ctxStopAudit } = useAudit();
+
   const [scans, setScans] = useState<Scan[]>([]);
   const [scanDetails, setScanDetails] = useState<Map<string, ScanDetail>>(
     new Map()
@@ -153,7 +156,6 @@ export default function AuditPage({
   const [error, setError] = useState<string | null>(null);
   const [expandedScan, setExpandedScan] = useState<string | null>(null);
   const [exportingFormat, setExportingFormat] = useState<string | null>(null);
-  const [activeAuditId, setActiveAuditId] = useState<string | null>(null);
   const [auditStarting, setAuditStarting] = useState(false);
 
   // Fetch scans and details
@@ -223,7 +225,7 @@ export default function AuditPage({
       }
 
       const data = await res.json();
-      setActiveAuditId(data.auditId);
+      startAudit(data.auditId);
     } catch (err) {
       console.error('Failed to start audit:', err);
     } finally {
@@ -245,14 +247,15 @@ export default function AuditPage({
       console.error('Failed to stop audit:', err);
     }
 
-    setActiveAuditId(null);
+    ctxStopAudit();
   }
 
   // Handle audit stream completion
-  function handleAuditComplete() {
-    setActiveAuditId(null);
+  const handleAuditComplete = useCallback(() => {
+    ctxStopAudit();
     fetchData();
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ctxStopAudit]);
 
   // Build audit entries with deltas
   const auditEntries: AuditEntry[] = useMemo(() => {
@@ -461,8 +464,6 @@ export default function AuditPage({
           </CardHeader>
           <CardContent>
             <AuditStream
-              auditId={activeAuditId}
-              isActive={true}
               onComplete={handleAuditComplete}
             />
           </CardContent>

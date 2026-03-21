@@ -1,40 +1,17 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useAudit, type StreamBlock, type TextBlock } from "./audit-context";
 
 // ── Types ──
 
 interface AuditStreamProps {
-  auditId: string;
-  isActive: boolean;
+  /** Optional — if omitted the component reads from the global audit context. */
+  auditId?: string;
+  /** @deprecated Ignored. Streaming state is managed by AuditProvider. */
+  isActive?: boolean;
   onComplete?: () => void;
 }
-
-interface TextBlock {
-  kind: "text";
-  text: string;
-}
-
-interface ThinkingBlock {
-  kind: "thinking";
-  text: string;
-}
-
-interface ToolUseBlock {
-  kind: "tool_use";
-  toolName: string;
-  toolId: string;
-  input: Record<string, unknown>;
-}
-
-interface ToolResultBlock {
-  kind: "tool_result";
-  toolId: string;
-  text: string;
-  isError: boolean;
-}
-
-type StreamBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock;
 
 // ── Simple Markdown Renderer ──
 
@@ -99,171 +76,21 @@ function getToolHint(input: Record<string, unknown>): string {
   return "";
 }
 
-// ── Parse JSONL line into StreamBlock ──
-
-function parseJsonlLine(line: string): StreamBlock | null {
-  let obj: Record<string, unknown>;
-  try {
-    obj = JSON.parse(line);
-  } catch {
-    return null;
-  }
-
-  const type = obj.type as string | undefined;
-
-  if (type === "text") {
-    return { kind: "text", text: (obj.text as string) || "" };
-  }
-
-  if (type === "thinking") {
-    return {
-      kind: "thinking",
-      text: (obj.thinking as string) || (obj.text as string) || "",
-    };
-  }
-
-  if (type === "tool_use") {
-    return {
-      kind: "tool_use",
-      toolName: (obj.name as string) || "Tool",
-      toolId: (obj.id as string) || "",
-      input: (obj.input as Record<string, unknown>) || {},
-    };
-  }
-
-  if (type === "tool_result") {
-    let resultText = "";
-    const content = obj.content;
-    if (typeof content === "string") {
-      resultText = content;
-    } else if (Array.isArray(content)) {
-      resultText = content
-        .filter((c: Record<string, unknown>) => c && c.text)
-        .map((c: Record<string, unknown>) => c.text as string)
-        .join("\n");
-    }
-    return {
-      kind: "tool_result",
-      toolId: (obj.tool_use_id as string) || "",
-      text: resultText,
-      isError: (obj.is_error as boolean) || false,
-    };
-  }
-
-  // If it has a text field but no recognized type, treat as text
-  if (typeof obj.text === "string") {
-    return { kind: "text", text: obj.text };
-  }
-
-  return null;
-}
-
 // ── Component ──
 
-export function AuditStream({ auditId, isActive, onComplete }: AuditStreamProps) {
-  const [blocks, setBlocks] = useState<StreamBlock[]>([]);
+export function AuditStream({ onComplete }: AuditStreamProps) {
+  const { blocks, isStreaming, onComplete: subscribeComplete } = useAudit();
   const [showScrollBtn, setShowScrollBtn] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const onCompleteRef = useRef(onComplete);
-  onCompleteRef.current = onComplete;
   const userScrolledRef = useRef(false);
-  const rafIdRef = useRef<number | null>(null);
-  const pendingBlocksRef = useRef<StreamBlock[]>([]);
-  const lastFlushRef = useRef(0);
 
-  // ── Flush pending blocks with 1s throttle via rAF ──
-
-  const scheduleFlush = useCallback(() => {
-    if (rafIdRef.current !== null) return;
-
-    rafIdRef.current = requestAnimationFrame(() => {
-      const now = Date.now();
-      const elapsed = now - lastFlushRef.current;
-
-      if (elapsed < 1000 && pendingBlocksRef.current.length > 0) {
-        // Re-schedule after remaining time
-        rafIdRef.current = null;
-        setTimeout(() => scheduleFlush(), 1000 - elapsed);
-        return;
-      }
-
-      if (pendingBlocksRef.current.length > 0) {
-        const toFlush = [...pendingBlocksRef.current];
-        pendingBlocksRef.current = [];
-        lastFlushRef.current = now;
-
-        setBlocks((prev) => [...prev, ...toFlush]);
-      }
-
-      rafIdRef.current = null;
-    });
-  }, []);
-
-  // ── SSE Connection ──
+  // ── Subscribe to completion callback ──
 
   useEffect(() => {
-    if (!isActive) return;
-
-    const eventSource = new EventSource(`/api/audits/${auditId}/progress`);
-
-    // Handle named "chunk" events — raw text streaming
-    eventSource.addEventListener("chunk", (event: MessageEvent) => {
-      const block: StreamBlock = { kind: "text", text: event.data };
-      pendingBlocksRef.current.push(block);
-      scheduleFlush();
-    });
-
-    // Handle named "progress" events — existing progress JSON
-    eventSource.addEventListener("progress", (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.status === "complete" || data.status === "error") {
-          // Flush anything remaining immediately
-          if (pendingBlocksRef.current.length > 0) {
-            const remaining = [...pendingBlocksRef.current];
-            pendingBlocksRef.current = [];
-            setBlocks((prev) => [...prev, ...remaining]);
-          }
-          if (data.status === "complete") {
-            setTimeout(() => onCompleteRef.current?.(), 500);
-          }
-        }
-      } catch {
-        // ignore
-      }
-    });
-
-    // Handle default/unnamed events — JSONL lines
-    eventSource.onmessage = (event: MessageEvent) => {
-      const line = event.data;
-      if (!line) return;
-
-      const block = parseJsonlLine(line);
-      if (block) {
-        pendingBlocksRef.current.push(block);
-        scheduleFlush();
-      }
-    };
-
-    eventSource.onerror = () => {
-      // Flush remaining on error/close
-      if (pendingBlocksRef.current.length > 0) {
-        const remaining = [...pendingBlocksRef.current];
-        pendingBlocksRef.current = [];
-        setBlocks((prev) => [...prev, ...remaining]);
-      }
-      eventSource.close();
-    };
-
-    return () => {
-      eventSource.close();
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
-    };
-  }, [auditId, isActive, scheduleFlush]);
+    if (!onComplete) return;
+    return subscribeComplete(onComplete);
+  }, [onComplete, subscribeComplete]);
 
   // ── Auto-scroll ──
 
@@ -285,8 +112,8 @@ export function AuditStream({ auditId, isActive, onComplete }: AuditStreamProps)
     const isNearBottom = distanceFromBottom < 60;
 
     userScrolledRef.current = !isNearBottom;
-    setShowScrollBtn(!isNearBottom && isActive);
-  }, [isActive]);
+    setShowScrollBtn(!isNearBottom && isStreaming);
+  }, [isStreaming]);
 
   const scrollToBottom = useCallback(() => {
     const container = containerRef.current;
@@ -320,7 +147,7 @@ export function AuditStream({ auditId, isActive, onComplete }: AuditStreamProps)
   return (
     <div className="relative">
       {/* Streaming indicator */}
-      {isActive && (
+      {isStreaming && (
         <div className="flex items-center gap-2 mb-2 px-1">
           <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
           <span className="text-xs text-muted-foreground">Streaming...</span>
@@ -333,7 +160,7 @@ export function AuditStream({ auditId, isActive, onComplete }: AuditStreamProps)
         onScroll={handleScroll}
         className="max-h-[600px] overflow-y-auto space-y-3 rounded-lg border bg-background p-4"
       >
-        {mergedBlocks.length === 0 && isActive && (
+        {mergedBlocks.length === 0 && isStreaming && (
           <div className="text-sm text-muted-foreground italic">
             Waiting for output...
           </div>
