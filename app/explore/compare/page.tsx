@@ -2,57 +2,21 @@
 
 import { useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { Plus, ArrowLeft } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   ComparisonColumn,
-  type GitHubMetadata,
-  type ScanResult,
   type Finding,
+  type ScanResult,
 } from "@/components/github/comparison-column";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface RepoEntry {
-  /** Unique key for React list rendering */
-  key: string;
-  owner: string;
-  repo: string;
-  metadata: GitHubMetadata | null;
-  scanResult: ScanResult | null;
-  loading: boolean;
-  scanning: boolean;
-  error: string | null;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function parseOwnerRepo(input: string): { owner: string; repo: string } | null {
-  const trimmed = input.trim().replace(/\/+$/, "");
-
-  // Full GitHub URL
-  const urlMatch = trimmed.match(
-    /(?:https?:\/\/)?(?:www\.)?github\.com\/([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)/,
-  );
-  if (urlMatch) {
-    return { owner: urlMatch[1], repo: urlMatch[2] };
-  }
-
-  // owner/repo shorthand
-  const shortMatch = trimmed.match(/^([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)$/);
-  if (shortMatch) {
-    return { owner: shortMatch[1], repo: shortMatch[2] };
-  }
-
-  return null;
-}
-
-const MAX_REPOS = 3;
+import { CompareInput } from "@/components/explore/compare-input";
+import { CompareEmptyState } from "@/components/explore/compare-empty-state";
+import {
+  type RepoEntry,
+  parseOwnerRepo,
+  MAX_REPOS,
+  computeModuleHighlights,
+} from "@/components/explore/compare-helpers";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -62,14 +26,12 @@ export default function ComparePage() {
   const [repos, setRepos] = useState<RepoEntry[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [inputError, setInputError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   const keyCounter = useRef(0);
 
   // ------ Add repo ------
 
   const addRepo = useCallback(
     (owner: string, repo: string) => {
-      // Deduplicate
       const alreadyAdded = repos.some(
         (r) => r.owner.toLowerCase() === owner.toLowerCase() && r.repo.toLowerCase() === repo.toLowerCase(),
       );
@@ -98,7 +60,6 @@ export default function ComparePage() {
       setInputValue("");
       setInputError(null);
 
-      // Fetch metadata + scan results
       fetchRepoData(key, owner, repo);
     },
     [repos],
@@ -112,15 +73,6 @@ export default function ComparePage() {
     }
     addRepo(parsed.owner, parsed.repo);
   }, [inputValue, addRepo]);
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Enter") {
-        handleAdd();
-      }
-    },
-    [handleAdd],
-  );
 
   // ------ Remove repo ------
 
@@ -149,7 +101,6 @@ export default function ComparePage() {
 
       let scanResult: ScanResult | null = null;
       if (data.scanned && data.scanId) {
-        // Fetch detailed scan results including findings
         scanResult = await fetchScanDetails(data.scanId, data.overallScore, data.modules);
       }
 
@@ -167,7 +118,6 @@ export default function ComparePage() {
         ),
       );
 
-      // If scan is in progress, poll for completion
       if (data.scanning && data.scanId) {
         pollForCompletion(key, owner, repo);
       }
@@ -217,7 +167,6 @@ export default function ComparePage() {
       // Fall through to basic result
     }
 
-    // Fallback: return without findings
     return {
       scanId,
       overallScore,
@@ -306,7 +255,6 @@ export default function ComparePage() {
         }
 
         if (data.cached) {
-          // Fetch results immediately for cached scan
           fetchRepoData(key, owner, repo);
         } else {
           pollForCompletion(key, owner, repo);
@@ -321,8 +269,6 @@ export default function ComparePage() {
     },
     [fetchRepoData, pollForCompletion],
   );
-
-  // ------ Compute module highlights (best/worst per module row) ------
 
   const moduleHighlightsMap = computeModuleHighlights(repos);
 
@@ -344,50 +290,20 @@ export default function ComparePage() {
         </div>
       </div>
 
-      {/* Add repo input */}
-      <div className="flex items-start gap-2 max-w-lg">
-        <div className="flex-1 space-y-1">
-          <div className="flex gap-2">
-            <Input
-              ref={inputRef}
-              placeholder="owner/repo or GitHub URL..."
-              value={inputValue}
-              onChange={(e) => {
-                setInputValue(e.target.value);
-                setInputError(null);
-              }}
-              onKeyDown={handleKeyDown}
-              className="h-9"
-              disabled={repos.length >= MAX_REPOS}
-            />
-            <Button
-              variant="outline"
-              size="default"
-              onClick={handleAdd}
-              disabled={repos.length >= MAX_REPOS || !inputValue.trim()}
-            >
-              <Plus className="h-4 w-4" />
-              Add
-            </Button>
-          </div>
-          {inputError && (
-            <p className="text-xs text-destructive">{inputError}</p>
-          )}
-        </div>
-      </div>
+      <CompareInput
+        inputValue={inputValue}
+        inputError={inputError}
+        disabled={repos.length >= MAX_REPOS}
+        onInputChange={(value) => {
+          setInputValue(value);
+          setInputError(null);
+        }}
+        onAdd={handleAdd}
+      />
 
       {/* Comparison columns */}
       {repos.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed p-16 text-center">
-          <Plus className="h-12 w-12 text-muted-foreground/30 mb-4" />
-          <p className="text-lg font-medium text-muted-foreground">
-            Add repos to compare
-          </p>
-          <p className="text-sm text-muted-foreground/70 mt-1 max-w-md">
-            Enter GitHub URLs or owner/repo shorthand above to start comparing
-            code health side by side.
-          </p>
-        </div>
+        <CompareEmptyState />
       ) : (
         <div
           className="grid gap-4"
@@ -413,62 +329,4 @@ export default function ComparePage() {
       )}
     </div>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Highlight computation
-// ---------------------------------------------------------------------------
-
-/**
- * For each module that appears in at least 2 scanned repos, determine the
- * best (highest score) and worst (lowest score) column. Returns a map from
- * repo key -> { moduleId -> 'best' | 'worst' | null }.
- */
-function computeModuleHighlights(
-  repos: RepoEntry[],
-): Record<string, Record<string, "best" | "worst" | null>> {
-  const result: Record<string, Record<string, "best" | "worst" | null>> = {};
-  for (const r of repos) {
-    result[r.key] = {};
-  }
-
-  // Collect all module IDs across scanned repos
-  const scannedRepos = repos.filter((r) => r.scanResult);
-  if (scannedRepos.length < 2) return result;
-
-  const allModuleIds = new Set<string>();
-  for (const r of scannedRepos) {
-    for (const m of r.scanResult!.modules) {
-      allModuleIds.add(m.moduleId);
-    }
-  }
-
-  for (const moduleId of allModuleIds) {
-    // Gather scores for this module across repos
-    const entries: { key: string; score: number }[] = [];
-    for (const r of scannedRepos) {
-      const mod = r.scanResult!.modules.find((m) => m.moduleId === moduleId);
-      if (mod) {
-        entries.push({ key: r.key, score: mod.score });
-      }
-    }
-
-    if (entries.length < 2) continue;
-
-    const maxScore = Math.max(...entries.map((e) => e.score));
-    const minScore = Math.min(...entries.map((e) => e.score));
-
-    // Only highlight if there's actually a difference
-    if (maxScore === minScore) continue;
-
-    for (const e of entries) {
-      if (e.score === maxScore) {
-        result[e.key][moduleId] = "best";
-      } else if (e.score === minScore) {
-        result[e.key][moduleId] = "worst";
-      }
-    }
-  }
-
-  return result;
 }

@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import { nanoid } from 'nanoid';
-import { eq, and, desc, ne } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { scans, moduleResults, findings as findingsTable } from '@/lib/db/schema';
 import { getEnabledModules, getAllModules } from './registry';
@@ -9,61 +9,11 @@ import { readVibecheckRc, mergeWithRc } from '@/lib/config/vibecheckrc';
 import { getProfileConfig } from '@/lib/config/profiles';
 import { readSettings } from '@/lib/config/settings';
 import { classifyFiles } from '@/lib/metadata/classifier';
-import { detectLanguages, type RepoLanguages, type Language } from '@/lib/metadata/language-detector';
+import { detectLanguages } from '@/lib/metadata/language-detector';
+import { getAllowedModulesForLanguages } from './language-filter';
+import { reconcileFindingStatuses } from './finding-reconciler';
 import type { ModuleResult } from './types';
 import type { RegisteredModule } from './types';
-
-// ── Language → module mapping ───────────────────────────────────────────
-
-const JS_TS_MODULES = new Set([
-  'security', 'dependencies', 'complexity', 'dead-code',
-  'circular-deps', 'test-coverage', 'ast-rules', 'compliance', 'api-health',
-]);
-
-const GO_MODULES = new Set([
-  'go-security', 'go-dependencies', 'go-complexity',
-  'go-dead-code', 'go-test-coverage',
-]);
-
-const RUST_MODULES = new Set([
-  'rust-security', 'rust-dependencies', 'rust-complexity',
-  'rust-dead-code', 'rust-test-coverage',
-]);
-
-/** Modules that run regardless of detected language. */
-const UNIVERSAL_MODULES = new Set([
-  'git-health', 'naming-quality', 'doc-staleness',
-  'arch-smells', 'test-quality',
-]);
-
-/**
- * Given detected repo languages, return the set of module IDs that should
- * be allowed to run. Universal modules are always included.
- */
-function getAllowedModulesForLanguages(languages: RepoLanguages): Set<string> {
-  const allowed = new Set(UNIVERSAL_MODULES);
-  const { primary, all } = languages;
-
-  const hasLang = (lang: Language) =>
-    primary === lang || all.includes(lang);
-
-  const isJsTs = hasLang('typescript') || hasLang('javascript');
-  const isGo = hasLang('go');
-  const isRust = hasLang('rust');
-
-  if (isJsTs) for (const m of JS_TS_MODULES) allowed.add(m);
-  if (isGo) for (const m of GO_MODULES) allowed.add(m);
-  if (isRust) for (const m of RUST_MODULES) allowed.add(m);
-
-  // If nothing specific was detected, allow everything (safe fallback)
-  if (!isJsTs && !isGo && !isRust) {
-    for (const m of JS_TS_MODULES) allowed.add(m);
-    for (const m of GO_MODULES) allowed.add(m);
-    for (const m of RUST_MODULES) allowed.add(m);
-  }
-
-  return allowed;
-}
 
 export interface ScanProgress {
   scanId: string;
@@ -114,7 +64,7 @@ export async function runScan(
   const globalSettings = readSettings();
   const activeProfile = rc?.profile ?? globalSettings.profile ?? 'team';
 
-  // Apply profile as a base layer — explicit rc.modules/thresholds override profile defaults
+  // Apply profile as a base layer -- explicit rc.modules/thresholds override profile defaults
   const profileCfg = getProfileConfig(activeProfile);
   if (rc) {
     rc.modules = { ...profileCfg.modules, ...rc.modules };
@@ -122,7 +72,7 @@ export async function runScan(
     rc.profile = activeProfile;
     config = mergeWithRc(config, rc);
   } else {
-    // No .vibecheckrc — apply global profile directly
+    // No .vibecheckrc -- apply global profile directly
     config = mergeWithRc(config, {
       modules: profileCfg.modules,
       thresholds: profileCfg.thresholds,
@@ -173,11 +123,42 @@ export async function runScan(
   // Classify files by role for context-aware module scoring
   const fileRoles = classifyFiles(repoPath, rc ?? undefined);
 
-  const resultSummaries: Array<{
-    moduleId: string;
-    score: number;
-    confidence: number;
-  }> = [];
+  // Filter findings by ignore patterns from .vibecheckrc
+  const ignorePatterns: string[] = (config as ScanConfig & { rc?: { ignore?: string[] } } | undefined)?.rc?.ignore ?? [];
+
+  // Execute modules and collect results
+  const { resultSummaries, moduleErrors } = await executeModules(
+    enabledModules, repoPath, scanId, fileRoles, ignorePatterns,
+  );
+
+  // ── Fingerprint-based status tracking ──
+  await reconcileFindingStatuses(scanId, repoId);
+
+  // Compute overall score and finalize scan
+  finalizeScan(scanId, enabledModules.length, resultSummaries, moduleErrors, startTime, config);
+
+  return scanId;
+}
+
+// ── Module execution helpers ──
+
+interface ResultSummary {
+  moduleId: string;
+  score: number;
+  confidence: number;
+}
+
+/**
+ * Execute all enabled modules and save their results to the database.
+ */
+async function executeModules(
+  enabledModules: RegisteredModule[],
+  repoPath: string,
+  scanId: string,
+  fileRoles: Map<string, string[]>,
+  ignorePatterns: string[],
+): Promise<{ resultSummaries: ResultSummary[]; moduleErrors: number }> {
+  const resultSummaries: ResultSummary[] = [];
   let moduleErrors = 0;
 
   for (const mod of enabledModules) {
@@ -217,47 +198,7 @@ export async function runScan(
         fileRoles,
       });
 
-      // Save module result to DB
-      const moduleResultId = nanoid();
-      db.insert(moduleResults).values({
-        id: moduleResultId,
-        scanId,
-        moduleId: definition.id,
-        score: result.score,
-        confidence: result.confidence,
-        summary: result.summary,
-        metrics: JSON.stringify(result.metrics),
-      }).run();
-
-      // Filter findings by ignore patterns from .vibecheckrc
-      const ignorePatterns: string[] = (config as ScanConfig & { rc?: { ignore?: string[] } } | undefined)?.rc?.ignore ?? [];
-      const filteredFindings = ignorePatterns.length > 0
-        ? result.findings.filter((f) => {
-            if (!f.filePath) return true;
-            return !ignorePatterns.some((pattern) => {
-              // Simple glob: "components/ui/**" matches "components/ui/sidebar.tsx"
-              const prefix = pattern.replace(/\*\*$/, '').replace(/\*$/, '');
-              return f.filePath!.startsWith(prefix);
-            });
-          })
-        : result.findings;
-
-      // Save findings to DB
-      if (filteredFindings.length > 0) {
-        for (const finding of filteredFindings) {
-          db.insert(findingsTable).values({
-            id: finding.id,
-            moduleResultId,
-            fingerprint: finding.fingerprint,
-            severity: finding.severity,
-            filePath: finding.filePath,
-            line: finding.line ?? null,
-            message: finding.message,
-            category: finding.category,
-            status: 'new',
-          }).run();
-        }
-      }
+      saveModuleResult(scanId, definition.id, result, ignorePatterns);
 
       resultSummaries.push({
         moduleId: definition.id,
@@ -287,22 +228,76 @@ export async function runScan(
     }
   }
 
-  // ── Fingerprint-based status tracking ──
-  await reconcileFindingStatuses(scanId, repoId);
+  return { resultSummaries, moduleErrors };
+}
 
-  // Compute overall score
+/**
+ * Save a single module result (with filtered findings) to the database.
+ */
+function saveModuleResult(
+  scanId: string,
+  moduleId: string,
+  result: ModuleResult,
+  ignorePatterns: string[],
+): void {
+  const moduleResultId = nanoid();
+  db.insert(moduleResults).values({
+    id: moduleResultId,
+    scanId,
+    moduleId,
+    score: result.score,
+    confidence: result.confidence,
+    summary: result.summary,
+    metrics: JSON.stringify(result.metrics),
+  }).run();
+
+  const filteredFindings = ignorePatterns.length > 0
+    ? result.findings.filter((f) => {
+        if (!f.filePath) return true;
+        return !ignorePatterns.some((pattern) => {
+          const prefix = pattern.replace(/\*\*$/, '').replace(/\*$/, '');
+          return f.filePath!.startsWith(prefix);
+        });
+      })
+    : result.findings;
+
+  if (filteredFindings.length > 0) {
+    for (const finding of filteredFindings) {
+      db.insert(findingsTable).values({
+        id: finding.id,
+        moduleResultId,
+        fingerprint: finding.fingerprint,
+        severity: finding.severity,
+        filePath: finding.filePath,
+        line: finding.line ?? null,
+        message: finding.message,
+        category: finding.category,
+        status: 'new',
+      }).run();
+    }
+  }
+}
+
+/**
+ * Compute overall score and update the scan record as completed/failed.
+ */
+function finalizeScan(
+  scanId: string,
+  totalModules: number,
+  resultSummaries: ResultSummary[],
+  moduleErrors: number,
+  startTime: number,
+  config?: ScanConfig,
+): void {
   const overallScore = computeOverallScore(resultSummaries, config?.weights);
   const durationMs = Date.now() - startTime;
 
-  // Determine final status: 'completed' if all modules ran, 'partial' if some failed, 'failed' if all failed
-  const totalModules = enabledModules.length;
   const finalStatus = moduleErrors === 0
     ? 'completed'
     : moduleErrors < totalModules
       ? 'completed'  // partial success still counts as completed, but we track errors
       : 'failed';
 
-  // Update scan record
   db.update(scans)
     .set({
       status: finalStatus,
@@ -311,175 +306,11 @@ export async function runScan(
     })
     .where(eq(scans.id, scanId))
     .run();
-
-  return scanId;
-}
-
-// ── Internal helpers for fingerprint reconciliation ──
-
-interface FingerprintRecord {
-  id: string;
-  fingerprint: string;
-  moduleResultId: string | null;
-  severity: string;
-  filePath: string | null;
-  line: number | null;
-  message: string;
-  category: string;
-  status: string;
-}
-
-/**
- * Load all findings for a given scan by joining through moduleResults.
- */
-function loadFindingsForScan(targetScanId: string): FingerprintRecord[] {
-  const results = db
-    .select()
-    .from(moduleResults)
-    .where(eq(moduleResults.scanId, targetScanId))
-    .all();
-
-  const allFindings: FingerprintRecord[] = [];
-  for (const mr of results) {
-    const rows = db
-      .select()
-      .from(findingsTable)
-      .where(eq(findingsTable.moduleResultId, mr.id))
-      .all();
-    allFindings.push(...rows);
-  }
-  return allFindings;
-}
-
-/**
- * After all modules have run for the current scan, compare fingerprints
- * against previous scans to set finding statuses:
- *   - new: fingerprint not in previous scan
- *   - recurring: fingerprint present in previous scan
- *   - fixed: fingerprint in previous scan but not current (create a record)
- *   - regressed: was fixed in previous scan but reappears now
- */
-async function reconcileFindingStatuses(
-  currentScanId: string,
-  repoId: string
-): Promise<void> {
-  // Find the most recent completed scan for this repo (before the current one)
-  const previousScans = db
-    .select()
-    .from(scans)
-    .where(
-      and(
-        eq(scans.repoId, repoId),
-        eq(scans.status, 'completed'),
-        ne(scans.id, currentScanId)
-      )
-    )
-    .orderBy(desc(scans.createdAt))
-    .limit(2)
-    .all();
-
-  if (previousScans.length === 0) {
-    // No previous scan — all findings stay as 'new' (default)
-    return;
-  }
-
-  const prevScan = previousScans[0];
-  const prevFindings = loadFindingsForScan(prevScan.id);
-  const prevFingerprints = new Set(prevFindings.map((f) => f.fingerprint));
-
-  // Check 2 scans back for regression detection
-  let twoBackFingerprints: Set<string> | null = null;
-  let twoBackFixedFingerprints: Set<string> | null = null;
-
-  if (previousScans.length >= 2) {
-    const twoBackScan = previousScans[1];
-    const twoBackFindings = loadFindingsForScan(twoBackScan.id);
-    twoBackFingerprints = new Set(twoBackFindings.map((f) => f.fingerprint));
-
-    // Fingerprints that were 'fixed' in the previous scan (existed 2 scans back
-    // but not in the previous scan)
-    twoBackFixedFingerprints = new Set<string>();
-    for (const fp of twoBackFingerprints) {
-      if (!prevFingerprints.has(fp)) {
-        twoBackFixedFingerprints.add(fp);
-      }
-    }
-    // Also include findings explicitly marked fixed in the previous scan
-    for (const f of prevFindings) {
-      if (f.status === 'fixed') {
-        twoBackFixedFingerprints.add(f.fingerprint);
-      }
-    }
-  }
-
-  // Load current findings
-  const currentFindings = loadFindingsForScan(currentScanId);
-  const currentFingerprints = new Set(currentFindings.map((f) => f.fingerprint));
-
-  // Update statuses for current findings
-  for (const finding of currentFindings) {
-    let newStatus: string;
-
-    if (
-      twoBackFixedFingerprints &&
-      twoBackFixedFingerprints.has(finding.fingerprint)
-    ) {
-      // Was fixed in the previous scan but reappears now → regressed
-      newStatus = 'regressed';
-    } else if (prevFingerprints.has(finding.fingerprint)) {
-      // Existed in previous scan → recurring
-      newStatus = 'recurring';
-    } else {
-      // Not in previous scan → new
-      newStatus = 'new';
-    }
-
-    if (newStatus !== finding.status) {
-      db.update(findingsTable)
-        .set({ status: newStatus })
-        .where(eq(findingsTable.id, finding.id))
-        .run();
-    }
-  }
-
-  // Create 'fixed' records for previous findings not in the current scan
-  // We need a moduleResultId to attach them to — use the first one from the current scan
-  const currentModuleResults = db
-    .select()
-    .from(moduleResults)
-    .where(eq(moduleResults.scanId, currentScanId))
-    .limit(1)
-    .all();
-
-  if (currentModuleResults.length > 0) {
-    const attachResultId = currentModuleResults[0].id;
-
-    for (const prevFinding of prevFindings) {
-      // Skip findings that were already 'fixed' in the previous scan
-      if (prevFinding.status === 'fixed') continue;
-
-      if (!currentFingerprints.has(prevFinding.fingerprint)) {
-        db.insert(findingsTable)
-          .values({
-            id: nanoid(),
-            moduleResultId: attachResultId,
-            fingerprint: prevFinding.fingerprint,
-            severity: prevFinding.severity,
-            filePath: prevFinding.filePath,
-            line: prevFinding.line,
-            message: prevFinding.message,
-            category: prevFinding.category,
-            status: 'fixed',
-          })
-          .run();
-      }
-    }
-  }
 }
 
 /**
  * Run a fast scan using only static modules (skip AI modules).
- * Does NOT write to the database — designed for post-commit hooks.
+ * Does NOT write to the database -- designed for post-commit hooks.
  * Enforces a 30-second timeout per module.
  *
  * @returns scores per module and the overall weighted score.
@@ -533,7 +364,7 @@ export async function runFastScan(
         confidence: result.confidence,
       });
     } catch {
-      // Skip modules that fail or timeout — don't block
+      // Skip modules that fail or timeout -- don't block
       continue;
     }
   }
