@@ -7,8 +7,12 @@ import { homedir } from 'os';
 const dir = join(homedir(), '.vibecheck');
 mkdirSync(dir, { recursive: true });
 
-const sqlite = new Database(join(dir, 'vibecheck.db'));
-sqlite.pragma('journal_mode = WAL');
+const globalForDb = globalThis as typeof globalThis & { __vcSqlite?: InstanceType<typeof Database> };
+const sqlite = globalForDb.__vcSqlite ??= (() => {
+  const instance = new Database(join(dir, 'vibecheck.db'));
+  instance.pragma('journal_mode = WAL');
+  return instance;
+})();
 
 // ── Auto-migration ──────────────────────────────────────────────────
 // Tracks applied migrations in a `_migrations` table and runs pending
@@ -62,4 +66,5 @@ try {
   // Migrations dir may not exist in some environments
 }
 
-export const db = drizzle(sqlite);
+const globalForDrizzle = globalThis as typeof globalThis & { __vcDb?: ReturnType<typeof drizzle> };
+export const db = globalForDrizzle.__vcDb ??= drizzle(sqlite);

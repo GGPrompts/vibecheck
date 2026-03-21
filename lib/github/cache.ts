@@ -15,7 +15,8 @@ interface CachedGitHubScan {
 // In-memory cache keyed by "owner/repo@sha"
 // ---------------------------------------------------------------------------
 
-const cache = new Map<string, CachedGitHubScan>();
+const globalForGhCache = globalThis as typeof globalThis & { __vcGhCache?: Map<string, CachedGitHubScan> };
+const cache = globalForGhCache.__vcGhCache ??= new Map<string, CachedGitHubScan>();
 
 function cacheKey(owner: string, repo: string, sha: string): string {
   return `${owner}/${repo}@${sha}`;

@@ -1,6 +1,7 @@
 import type { ModuleDefinition, ModuleRunner, RegisteredModule } from './types';
 
-const modules = new Map<string, RegisteredModule>();
+const globalForRegistry = globalThis as typeof globalThis & { __vcModules?: Map<string, RegisteredModule> };
+const modules = globalForRegistry.__vcModules ??= new Map<string, RegisteredModule>();
 
 export function registerModule(
   definition: ModuleDefinition,
