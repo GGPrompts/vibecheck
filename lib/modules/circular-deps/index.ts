@@ -136,7 +136,7 @@ const runner: ModuleRunner = {
           score: -1,
           confidence: 0,
           findings: [],
-          metrics: { error: true },
+          metrics: { error: 1 },
           summary: `Skipped: dependency-cruiser unavailable or failed. Install with: npm install -D dependency-cruiser`,
         };
       }
