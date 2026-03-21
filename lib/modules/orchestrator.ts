@@ -53,9 +53,10 @@ export interface ScanConfig {
 export async function runScan(
   repoPath: string,
   repoId: string,
-  config?: ScanConfig
+  config?: ScanConfig,
+  existingScanId?: string
 ): Promise<string> {
-  const scanId = nanoid();
+  const scanId = existingScanId ?? nanoid();
   const startTime = Date.now();
 
   // Read per-repo .vibecheckrc and merge with incoming config
@@ -98,13 +99,15 @@ export async function runScan(
     detectedLanguages: repoLanguages,
   };
 
-  // Create the scan record
-  db.insert(scans).values({
-    id: scanId,
-    repoId,
-    status: 'running',
-    configSnapshot: JSON.stringify(configWithLanguages),
-  }).run();
+  // Create the scan record (skip if caller pre-created it)
+  if (!existingScanId) {
+    db.insert(scans).values({
+      id: scanId,
+      repoId,
+      status: 'running',
+      configSnapshot: JSON.stringify(configWithLanguages),
+    }).run();
+  }
 
   let enabledModules = getEnabledModules(config?.enabledModules);
 

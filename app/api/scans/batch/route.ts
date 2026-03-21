@@ -33,15 +33,16 @@ export async function POST(request: Request) {
 
     const batchId = nanoid();
 
-    // Fire and forget — the batch runs in the background
-    const batchPromise = runBatchScan(repoIds, {
-      enableAi: aiEnabled,
-      batchId,
-    });
-
-    batchPromise.catch((err) => {
-      console.error('Batch scan failed:', err);
-    });
+    // Detach from route handler's async context so Next.js sends
+    // the 202 response immediately instead of waiting for the scan.
+    setTimeout(() => {
+      runBatchScan(repoIds, {
+        enableAi: aiEnabled,
+        batchId,
+      }).catch((err) => {
+        console.error('Batch scan failed:', err);
+      });
+    }, 0);
 
     return NextResponse.json({ batchId }, { status: 202 });
   } catch (error) {

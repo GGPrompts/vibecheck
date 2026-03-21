@@ -74,43 +74,38 @@ export async function POST(request: Request) {
       })
       .run();
 
-    // Fire off the scan with static modules only
-    const scanPromise = runScan(clone.path, repoId, {
-      enabledModules: STATIC_MODULES,
-    });
+    // Pre-create scan record so we can return the scanId immediately
+    const scanId = nanoid();
+    db.insert(scans).values({
+      id: scanId,
+      repoId,
+      status: 'running',
+      configSnapshot: JSON.stringify({ enabledModules: STATIC_MODULES }),
+    }).run();
 
-    // The scan record is created synchronously inside runScan, so we can
-    // query it immediately to get the scanId.
-    const latestScan = db
-      .select({ id: scans.id })
-      .from(scans)
-      .where(eq(scans.repoId, repoId))
-      .limit(1)
-      .get();
-
-    const scanId = latestScan?.id ?? 'unknown';
-
-    // Background: wait for scan to complete, cache result, cleanup clone
-    scanPromise
-      .then(async (completedScanId) => {
-        try {
-          const meta = await fetchRepoMetadata(owner, repo);
-          setCachedResult(owner, repo, clone.sha, {
-            scanId: completedScanId,
-            repoId,
-            metadata: meta,
-            scannedAt: new Date().toISOString(),
-          });
-        } catch {
-          // Metadata fetch failure is non-fatal for caching
-        }
-      })
-      .catch((err) => {
-        console.error(`GitHub scan failed for ${owner}/${repo}:`, err);
-      })
-      .finally(() => {
-        clone.cleanup();
-      });
+    // Detach scan from route handler so Next.js sends 202 immediately
+    setTimeout(() => {
+      runScan(clone.path, repoId, { enabledModules: STATIC_MODULES }, scanId)
+        .then(async (completedScanId) => {
+          try {
+            const meta = await fetchRepoMetadata(owner, repo);
+            setCachedResult(owner, repo, clone.sha, {
+              scanId: completedScanId,
+              repoId,
+              metadata: meta,
+              scannedAt: new Date().toISOString(),
+            });
+          } catch {
+            // Metadata fetch failure is non-fatal for caching
+          }
+        })
+        .catch((err) => {
+          console.error(`GitHub scan failed for ${owner}/${repo}:`, err);
+        })
+        .finally(() => {
+          clone.cleanup();
+        });
+    }, 0);
 
     return NextResponse.json(
       { scanId, repoId, owner, repo, cached: false },

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { nanoid } from 'nanoid';
 import { eq, desc, and } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { repos, scans, scanConfigs } from '@/lib/db/schema';
@@ -41,32 +42,24 @@ export async function POST(request: Request) {
       };
     }
 
-    // Fire and forget — runScan synchronously inserts the scan record (via
-    // better-sqlite3 .run()) before its first await, so by the time the
-    // returned promise is stored, the DB row already exists.
-    const scanPromise = runScan(repo.path, repoId, config);
+    // Create the scan record upfront so we can return the scanId immediately.
+    // runScan creates it internally too, but we need the ID before starting.
+    const scanId = nanoid();
+    db.insert(scans).values({
+      id: scanId,
+      repoId,
+      status: 'running',
+      configSnapshot: JSON.stringify(config ?? {}),
+    }).run();
 
-    // Query the DB for the scan that was just created synchronously
-    const latestScan = db
-      .select({ id: scans.id })
-      .from(scans)
-      .where(and(eq(scans.repoId, repoId), eq(scans.status, 'running')))
-      .orderBy(desc(scans.createdAt))
-      .limit(1)
-      .get();
-
-    // Let the scan run to completion in the background — log errors only
-    scanPromise.catch((err) => {
-      console.error('Scan failed:', err);
-    });
-
-    const scanId = latestScan?.id;
-    if (!scanId) {
-      return NextResponse.json(
-        { error: 'Failed to start scan' },
-        { status: 500 }
-      );
-    }
+    // Detach scan execution from the route handler's async context.
+    // Without setTimeout, Next.js waits for the dangling promise before
+    // sending the response, blocking the 202 for the entire scan duration.
+    setTimeout(() => {
+      runScan(repo.path, repoId, config, scanId).catch((err) => {
+        console.error('Scan failed:', err);
+      });
+    }, 0);
 
     return NextResponse.json({ scanId }, { status: 202 });
   } catch (error) {
