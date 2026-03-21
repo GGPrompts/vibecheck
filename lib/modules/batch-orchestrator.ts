@@ -17,12 +17,33 @@ export interface BatchProgress {
 type BatchEventCallback = (progress: BatchProgress) => void;
 
 class BatchEventEmitter extends EventEmitter {
+  /** Buffer of recent events per batch, replayed when a listener connects. */
+  private replayBuffer = new Map<string, { progress: BatchProgress[]; done: boolean }>();
+
   emitProgress(batchId: string, progress: BatchProgress): void {
+    // Buffer for late-connecting listeners
+    if (!this.replayBuffer.has(batchId)) {
+      this.replayBuffer.set(batchId, { progress: [], done: false });
+    }
+    const buf = this.replayBuffer.get(batchId)!;
+    buf.progress = [progress]; // Only keep latest progress (not a growing list)
+
     this.emit(`progress:${batchId}`, progress);
   }
 
   onProgress(batchId: string, listener: (progress: BatchProgress) => void): void {
     this.on(`progress:${batchId}`, listener);
+
+    // Replay buffered progress to the new listener
+    const buf = this.replayBuffer.get(batchId);
+    if (buf) {
+      for (const p of buf.progress) {
+        listener(p);
+      }
+      if (buf.done) {
+        this.emit(`done:${batchId}`);
+      }
+    }
   }
 
   offProgress(batchId: string, listener: (progress: BatchProgress) => void): void {
@@ -30,21 +51,34 @@ class BatchEventEmitter extends EventEmitter {
   }
 
   emitDone(batchId: string): void {
+    // Mark as done in buffer for late-connecting listeners
+    const buf = this.replayBuffer.get(batchId);
+    if (buf) {
+      buf.done = true;
+    }
+
     this.emit(`done:${batchId}`);
   }
 
   onDone(batchId: string, listener: () => void): void {
     this.on(`done:${batchId}`, listener);
+
+    // If already done, fire immediately
+    const buf = this.replayBuffer.get(batchId);
+    if (buf?.done) {
+      listener();
+    }
   }
 
   offDone(batchId: string, listener: () => void): void {
     this.off(`done:${batchId}`, listener);
   }
 
-  /** Clean up all listeners for a given batch. */
+  /** Clean up all listeners and replay buffer for a given batch. */
   cleanup(batchId: string): void {
     this.removeAllListeners(`progress:${batchId}`);
     this.removeAllListeners(`done:${batchId}`);
+    this.replayBuffer.delete(batchId);
   }
 }
 
