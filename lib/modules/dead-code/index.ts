@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { nanoid } from 'nanoid';
 import { registerModule } from '../registry';
@@ -44,6 +44,24 @@ const runner: ModuleRunner = {
   async run(repoPath: string, opts: RunOptions): Promise<ModuleResult> {
     opts.onProgress?.(10, 'Running knip dead-code analysis...');
 
+    // If no knip.json exists and we have auto-detected entry points,
+    // write a temporary knip config so knip knows about entrypoints
+    const hasKnipConfig = existsSync(join(repoPath, 'knip.json')) ||
+      existsSync(join(repoPath, 'knip.jsonc')) ||
+      existsSync(join(repoPath, 'knip.ts')) ||
+      existsSync(join(repoPath, '.knip.json'));
+    let tempKnipConfig: string | null = null;
+
+    if (!hasKnipConfig && opts.autoDetect && opts.autoDetect.knipEntryPoints.length > 0) {
+      const knipConfig = {
+        entry: opts.autoDetect.knipEntryPoints,
+        project: ['**/*.{ts,tsx,js,jsx,mjs,cjs}'],
+        ignore: opts.autoDetect.knipIgnorePatterns,
+      };
+      tempKnipConfig = join(repoPath, '.knip.json');
+      writeFileSync(tempKnipConfig, JSON.stringify(knipConfig, null, 2), 'utf-8');
+    }
+
     let stdout = '';
     try {
       stdout = execSync('npx knip --reporter json', {
@@ -70,6 +88,11 @@ const runner: ModuleRunner = {
           metrics: {},
           summary: `knip analysis failed: ${error instanceof Error ? error.message : String(error)}`,
         };
+      }
+    } finally {
+      // Always clean up temp knip config
+      if (tempKnipConfig) {
+        try { unlinkSync(tempKnipConfig); } catch { /* ignore */ }
       }
     }
 
@@ -103,9 +126,19 @@ const runner: ModuleRunner = {
     let unusedExports = 0;
     let unusedDeps = 0;
 
+    // Roles that should suppress "unused file" warnings
+    const fileExemptRoles = opts.autoDetect?.deadCodeExemptRoles ??
+      new Set(['cli-entrypoint', 'mcp-tool', 'provider', 'api-route']);
+
     // Unused files
     if (knipData.files) {
       for (const filePath of knipData.files) {
+        // Skip files whose roles indicate they are legitimate entrypoints
+        const rolesForFile = opts.fileRoles?.get(filePath);
+        if (rolesForFile?.some((r) => fileExemptRoles.has(r))) {
+          continue;
+        }
+
         unusedFiles++;
         const finding: Omit<Finding, 'id' | 'fingerprint'> = {
           severity: 'medium',

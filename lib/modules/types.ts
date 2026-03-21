@@ -10,10 +10,21 @@ export interface ModuleDefinition {
   defaultEnabled: boolean;
 }
 
+export interface AutoDetectInfo {
+  /** Knip entry points derived from package.json and directory patterns. */
+  knipEntryPoints: string[];
+  /** Knip ignore patterns for directories that should not be flagged. */
+  knipIgnorePatterns: string[];
+  /** File roles that should suppress "unused file" dead-code warnings. */
+  deadCodeExemptRoles: Set<string>;
+}
+
 export interface RunOptions {
   signal?: AbortSignal;
   onProgress?: (pct: number, msg: string) => void;
   fileRoles?: Map<string, string[]>;
+  /** Auto-detected repo info for modules that need it (e.g. dead-code). */
+  autoDetect?: AutoDetectInfo;
 }
 
 export interface Finding {

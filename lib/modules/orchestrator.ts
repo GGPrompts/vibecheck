@@ -8,10 +8,12 @@ import { computeOverallScore } from './scoring';
 import { readVibecheckRc, mergeWithRc } from '@/lib/config/vibecheckrc';
 import { getProfileConfig } from '@/lib/config/profiles';
 import { readSettings } from '@/lib/config/settings';
+import { autoDetect } from '@/lib/config/auto-detect';
 import { classifyFiles } from '@/lib/metadata/classifier';
 import { detectLanguages } from '@/lib/metadata/language-detector';
 import { getAllowedModulesForLanguages } from './language-filter';
 import { reconcileFindingStatuses } from './finding-reconciler';
+import type { AutoDetectResult } from '@/lib/config/auto-detect';
 import type { ModuleResult } from './types';
 import type { RegisteredModule } from './types';
 
@@ -59,25 +61,41 @@ export async function runScan(
   const scanId = existingScanId ?? nanoid();
   const startTime = Date.now();
 
+  // ── 0. Auto-detect repo characteristics (lowest-priority config layer) ──
+  const autoDetected = autoDetect(repoPath);
+
   // Read per-repo .vibecheckrc and merge with incoming config
   const rc = readVibecheckRc(repoPath);
 
-  // Determine the active profile: .vibecheckrc > global config.json > default 'team'
+  // Determine the active profile with full priority chain:
+  //   .vibecheckrc > global config.json > auto-detected > default 'team'
   const globalSettings = readSettings();
-  const activeProfile = rc?.profile ?? globalSettings.profile ?? 'team';
+  const activeProfile =
+    rc?.profile ??
+    globalSettings.profile ??
+    autoDetected.configOverlay.profile ??
+    'team';
 
-  // Apply profile as a base layer -- explicit rc.modules/thresholds override profile defaults
+  // Apply profile as a base layer -- explicit rc.modules/thresholds override profile defaults.
+  // Auto-detected thresholds are the lowest layer: auto-detect -> profile -> rc -> explicit.
   const profileCfg = getProfileConfig(activeProfile);
   if (rc) {
     rc.modules = { ...profileCfg.modules, ...rc.modules };
-    rc.thresholds = { ...profileCfg.thresholds, ...rc.thresholds };
+    rc.thresholds = {
+      ...autoDetected.configOverlay.thresholds,
+      ...profileCfg.thresholds,
+      ...rc.thresholds,
+    };
     rc.profile = activeProfile;
     config = mergeWithRc(config, rc);
   } else {
-    // No .vibecheckrc -- apply global profile directly
+    // No .vibecheckrc -- apply auto-detect + profile directly
     config = mergeWithRc(config, {
       modules: profileCfg.modules,
-      thresholds: profileCfg.thresholds,
+      thresholds: {
+        ...autoDetected.configOverlay.thresholds,
+        ...profileCfg.thresholds,
+      },
     });
   }
 
@@ -93,10 +111,15 @@ export async function runScan(
     }
   }
 
-  // Store language info in the config snapshot
+  // Store language + auto-detect info in the config snapshot
   const configWithLanguages = {
     ...config,
     detectedLanguages: repoLanguages,
+    autoDetected: {
+      framework: autoDetected.detectedFramework,
+      suggestedProfile: autoDetected.suggestedProfile,
+      knipEntryPoints: autoDetected.knipEntryPoints,
+    },
   };
 
   // Create the scan record (skip if caller pre-created it)
@@ -132,7 +155,7 @@ export async function runScan(
 
   // Execute modules and collect results
   const { resultSummaries, moduleErrors } = await executeModules(
-    enabledModules, repoPath, scanId, fileRoles, ignorePatterns,
+    enabledModules, repoPath, scanId, fileRoles, ignorePatterns, autoDetected,
   );
 
   // ── Fingerprint-based status tracking ──
@@ -161,6 +184,7 @@ async function executeModules(
   scanId: string,
   fileRoles: Map<string, string[]>,
   ignorePatterns: string[],
+  autoDetected: AutoDetectResult,
 ): Promise<{ resultSummaries: ResultSummary[]; moduleErrors: number }> {
   const resultSummaries: ResultSummary[] = [];
   let moduleErrors = 0;
@@ -200,6 +224,11 @@ async function executeModules(
           });
         },
         fileRoles,
+        autoDetect: {
+          knipEntryPoints: autoDetected.knipEntryPoints,
+          knipIgnorePatterns: autoDetected.knipIgnorePatterns,
+          deadCodeExemptRoles: autoDetected.deadCodeExemptRoles,
+        },
       });
 
       saveModuleResult(scanId, definition.id, result, ignorePatterns);

@@ -6,9 +6,12 @@ import { analyzeBusFactor } from './bus-factor';
 import { analyzeChurn } from './churn';
 import { analyzeTodoAge } from './todo-age';
 import { analyzeStaleAreas } from './stale-areas';
+import { analyzeExternalSilos } from './external-silos';
 
 // ---------------------------------------------------------------------------
-// Module runner
+// Weights: churn 40%, external-silo 20%, todo-age 20%, stale-areas 20%
+// Bus factor is info-only (no score impact) — solo devs and AI-assisted
+// workflows should not be penalized for single-author files.
 // ---------------------------------------------------------------------------
 
 const runner: ModuleRunner = {
@@ -20,31 +23,24 @@ const runner: ModuleRunner = {
     const allFindings: Finding[] = [];
     const metrics: Record<string, number> = {};
 
-    // Roles where bus-factor findings should be downgraded to info
-    const busFactorDowngradeRoles = new Set(['cli-entrypoint', 'mcp-tool', 'provider']);
-
-    // 1. Bus factor (30%)
-    opts.onProgress?.(5, 'Analyzing bus factor...');
-    let authorDiversity = 1.0;
+    // 1. Bus factor — info-only (0% weight), no score impact
+    opts.onProgress?.(5, 'Analyzing bus factor (info-only)...');
     try {
       const busFactor = await analyzeBusFactor(repoPath);
-      // Downgrade bus-factor severity for infrastructure files
+      // Downgrade all bus-factor findings to info — they are informational
+      // signals, not score penalties
       for (const finding of busFactor.findings) {
-        const roles = opts.fileRoles?.get(finding.filePath);
-        if (roles?.some((r) => busFactorDowngradeRoles.has(r))) {
-          finding.severity = 'info';
-        }
+        finding.severity = 'info';
       }
       allFindings.push(...busFactor.findings);
-      authorDiversity = busFactor.authorDiversity;
-      metrics.busFactor = Math.round(authorDiversity * 100);
+      metrics.busFactor = Math.round(busFactor.authorDiversity * 100);
       metrics.knowledgeSiloFiles = busFactor.findings.length;
     } catch {
       metrics.busFactor = -1;
     }
 
-    // 2. Churn (30%)
-    opts.onProgress?.(30, 'Analyzing churn hotspots...');
+    // 2. Churn (40%)
+    opts.onProgress?.(20, 'Analyzing churn hotspots...');
     let churnHealth = 1.0;
     try {
       const churn = await analyzeChurn(repoPath);
@@ -56,8 +52,21 @@ const runner: ModuleRunner = {
       metrics.churnHealth = -1;
     }
 
-    // 3. TODO age (20%)
-    opts.onProgress?.(55, 'Analyzing TODO/FIXME age...');
+    // 3. External knowledge silos (20%)
+    opts.onProgress?.(40, 'Scanning for external knowledge silos...');
+    let siloScore = 1.0;
+    try {
+      const silos = analyzeExternalSilos(repoPath);
+      allFindings.push(...silos.findings);
+      siloScore = silos.siloScore;
+      metrics.externalSiloScore = Math.round(siloScore * 100);
+      metrics.externalSiloRefs = silos.findings.length;
+    } catch {
+      metrics.externalSiloScore = -1;
+    }
+
+    // 4. TODO age (20%)
+    opts.onProgress?.(60, 'Analyzing TODO/FIXME age...');
     let todoScore = 1.0;
     try {
       const todos = analyzeTodoAge(repoPath);
@@ -69,7 +78,7 @@ const runner: ModuleRunner = {
       metrics.todoScore = -1;
     }
 
-    // 4. Stale areas (20%)
+    // 5. Stale areas (20%)
     opts.onProgress?.(80, 'Analyzing stale areas...');
     let freshnessScore = 1.0;
     try {
@@ -82,14 +91,14 @@ const runner: ModuleRunner = {
       metrics.freshness = -1;
     }
 
-    // Composite score: weighted combination
+    // Composite score: churn 40%, external-silo 20%, todo 20%, stale 20%
     const score = Math.max(
       0,
       Math.min(
         100,
         Math.round(
-          authorDiversity * 30 +
-            churnHealth * 30 +
+          churnHealth * 40 +
+            siloScore * 20 +
             todoScore * 20 +
             freshnessScore * 20
         )
@@ -104,11 +113,16 @@ const runner: ModuleRunner = {
     summaryParts.push(`Git health score: ${score}/100.`);
     if (metrics.knowledgeSiloFiles > 0) {
       summaryParts.push(
-        `${metrics.knowledgeSiloFiles} knowledge silo files detected.`
+        `${metrics.knowledgeSiloFiles} knowledge silo files (info-only).`
       );
     }
     if (metrics.highChurnFiles > 0) {
       summaryParts.push(`${metrics.highChurnFiles} high-churn hotspots.`);
+    }
+    if (metrics.externalSiloRefs > 0) {
+      summaryParts.push(
+        `${metrics.externalSiloRefs} external knowledge silo references.`
+      );
     }
     if (metrics.staleTodos > 0) {
       summaryParts.push(`${metrics.staleTodos} stale TODOs (>90 days).`);
@@ -134,7 +148,7 @@ registerModule(
     id: 'git-health',
     name: 'Git Health',
     description:
-      'Git history analysis: bus factor, churn, TODOs, staleness',
+      'Git history analysis: churn, external silos, TODOs, staleness',
     category: 'static',
     defaultEnabled: true,
   },

@@ -2,8 +2,10 @@
  * Project profile definitions.
  *
  * Profiles let users declare their project type so scoring adjusts
- * automatically — a solo dev shouldn't be penalized for bus factor,
- * a prototype shouldn't get strict complexity checks, etc.
+ * automatically — a prototype shouldn't get strict complexity checks,
+ * enterprise projects need strict everything, etc.
+ * Note: bus-factor is info-only (0% weight) so it no longer penalizes
+ * solo devs or single-author repos.
  */
 
 // ---------------------------------------------------------------------------
@@ -28,7 +30,7 @@ interface ProfileConfig {
 export const PROFILES: Record<ProjectProfile, ProfileConfig> = {
   solo: {
     modules: {
-      'git-health': false, // bus-factor findings are irrelevant for solo devs
+      // git-health is now safe for solo devs: bus-factor is info-only (0% weight)
     },
     thresholds: {
       'complexity-loc': 800,
@@ -36,7 +38,7 @@ export const PROFILES: Record<ProjectProfile, ProfileConfig> = {
       'dead-code': 60, // relax unused-export scoring
       'telemetry-observability': 80, // solo devs need MORE observability — no team to debug for you
     },
-    description: 'Solo developer — disables bus-factor, relaxes complexity and dead-code thresholds, strict observability',
+    description: 'Solo developer — relaxes complexity and dead-code thresholds, strict observability',
   },
 
   team: {
@@ -47,13 +49,13 @@ export const PROFILES: Record<ProjectProfile, ProfileConfig> = {
 
   library: {
     modules: {
-      'git-health': false, // bus-factor less relevant for libraries
+      // git-health is now safe for libraries: bus-factor is info-only (0% weight)
     },
     thresholds: {
       'dead-code': 90, // strict unused exports — libraries should have clean public APIs
       complexity: 90, // strict complexity
     },
-    description: 'Published library — strict unused exports and complexity, no bus-factor',
+    description: 'Published library — strict unused exports and complexity',
   },
 
   prototype: {
