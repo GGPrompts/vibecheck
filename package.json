@@ -26,6 +26,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.1",
+    "framer-motion": "^12.38.0",
     "gitlog": "^5.1.0",
     "graphology": "^0.26.0",
     "graphology-communities-louvain": "^2.0.2",
