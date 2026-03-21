@@ -145,16 +145,21 @@ export default function SettingsPage() {
         onDeleteRepo={s.handleDeleteRepo}
       />
 
-      {/* Save Settings */}
-      <div className="flex items-center gap-3">
-        <Button onClick={s.handleSaveSettings} disabled={s.saving}>
-          {s.saving ? "Saving..." : s.saveSuccess ? "Settings Saved!" : "Save Settings"}
-        </Button>
-        {s.saveSuccess && (
-          <span className="text-sm text-muted-foreground">
-            All settings have been saved.
-          </span>
-        )}
+      {/* Spacer so content isn't hidden behind sticky bar */}
+      <div className="h-16" />
+
+      {/* Sticky Save Settings bar */}
+      <div className="sticky bottom-0 -mx-6 px-6 py-3 bg-background/95 backdrop-blur-sm border-t border-border shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+        <div className="flex items-center gap-3">
+          <Button onClick={s.handleSaveSettings} disabled={s.saving}>
+            {s.saving ? "Saving..." : s.saveSuccess ? "Settings Saved!" : "Save Settings"}
+          </Button>
+          {s.saveSuccess && (
+            <span className="text-sm text-muted-foreground">
+              All settings have been saved.
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
