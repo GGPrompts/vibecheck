@@ -2,7 +2,7 @@
 
 Exposes vibecheck as an MCP tool server for Claude Code integration. Communicates over stdio.
 
-## Tools (4)
+## Tools (5)
 
 | Tool | Input | Output |
 |------|-------|--------|
@@ -10,6 +10,7 @@ Exposes vibecheck as an MCP tool server for Claude Code integration. Communicate
 | `vibecheck_health` | `repo_path` | Latest health scores: overall + per-module breakdown |
 | `vibecheck_prompt` | `repo_path`, `scan_id?` | Generated Claude-optimized prompt from findings |
 | `vibecheck_findings` | `repo_path`, `scan_id?`, `severity?`, `module?`, `status?`, `limit?` | Filtered findings list |
+| `vibecheck_settings` | `action` (`get`/`set`), `profile?`, `tier?`, `enabledModules?`, `aiTokenBudget?`, `aiProvider?`, `modelOverrides?` | Current settings (get) or confirmation of updates (set) |
 
 ## Architecture
 

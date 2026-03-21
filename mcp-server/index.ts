@@ -7,10 +7,11 @@
  * MCP-capable agents.
  *
  * Tools:
- *   - vibecheck_scan    — trigger a full scan on a repository
- *   - vibecheck_health  — get latest health scores (overall + per-module)
- *   - vibecheck_prompt  — generate a Claude-optimized prompt from findings
+ *   - vibecheck_scan     — trigger a full scan on a repository
+ *   - vibecheck_health   — get latest health scores (overall + per-module)
+ *   - vibecheck_prompt   — generate a Claude-optimized prompt from findings
  *   - vibecheck_findings — list findings with filters (severity, module, status)
+ *   - vibecheck_settings — get or set vibecheck configuration
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -20,10 +21,12 @@ import {
   vibecheckHealthInput,
   vibecheckPromptInput,
   vibecheckFindingsInput,
+  vibecheckSettingsInput,
   handleVibecheckScan,
   handleVibecheckHealth,
   handleVibecheckPrompt,
   handleVibecheckFindings,
+  handleVibecheckSettings,
 } from './tools.js';
 
 const server = new McpServer(
@@ -66,6 +69,13 @@ server.tool(
   'List findings from a scan with optional filters. Findings are sorted by severity. Use filters to focus on specific modules, severity levels, or statuses (new, recurring, fixed, regressed).',
   vibecheckFindingsInput,
   handleVibecheckFindings
+);
+
+server.tool(
+  'vibecheck_settings',
+  'Get or set vibecheck configuration. Use action "get" to read current settings (profile, tier, enabled modules, AI provider, model overrides). Use action "set" with any combination of fields to update settings — e.g. switch a solo project from team to solo profile, or bump the scan tier for deeper analysis.',
+  vibecheckSettingsInput,
+  handleVibecheckSettings
 );
 
 // ── Start server ────────────────────────────────────────────────────────
