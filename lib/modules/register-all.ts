@@ -41,6 +41,7 @@ import './rust-test-coverage';
 import './type-safety';
 import './secrets-scan';
 import './config-quality';
+import './telemetry-observability';
 
 // New AI-powered modules
 import './doc-accuracy';

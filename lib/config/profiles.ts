@@ -34,8 +34,9 @@ export const PROFILES: Record<ProjectProfile, ProfileConfig> = {
       'complexity-loc': 800,
       'complexity-cyclomatic': 20,
       'dead-code': 60, // relax unused-export scoring
+      'telemetry-observability': 80, // solo devs need MORE observability — no team to debug for you
     },
-    description: 'Solo developer — disables bus-factor, relaxes complexity and dead-code thresholds',
+    description: 'Solo developer — disables bus-factor, relaxes complexity and dead-code thresholds, strict observability',
   },
 
   team: {
@@ -64,7 +65,7 @@ export const PROFILES: Record<ProjectProfile, ProfileConfig> = {
       'complexity-loc': 1500,
       'complexity-cyclomatic': 30,
     },
-    description: 'Prototype / spike — disables dead-code and git-health, heavily relaxes complexity; only security stays normal',
+    description: 'Prototype / spike — disables dead-code and git-health, heavily relaxes complexity; security and observability stay normal',
   },
 
   enterprise: {
@@ -77,6 +78,7 @@ export const PROFILES: Record<ProjectProfile, ProfileConfig> = {
       security: 95,
       'git-health': 85,
       dependencies: 90,
+      'telemetry-observability': 90,
     },
     description: 'Enterprise — strict everything, enables compliance modules, low thresholds',
   },
