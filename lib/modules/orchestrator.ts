@@ -37,8 +37,9 @@ class ScanEventEmitter extends EventEmitter {
   }
 }
 
-/** Global event emitter for SSE consumption. */
-export const scanEvents = new ScanEventEmitter();
+/** Global event emitter for SSE consumption. Survives HMR in dev mode. */
+const globalForScan = globalThis as typeof globalThis & { __scanEvents?: ScanEventEmitter };
+export const scanEvents = globalForScan.__scanEvents ??= new ScanEventEmitter();
 
 export interface ScanConfig {
   enabledModules?: string[];

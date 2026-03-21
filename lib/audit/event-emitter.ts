@@ -41,5 +41,6 @@ class AuditEventEmitter extends EventEmitter {
   }
 }
 
-/** Global event emitter for SSE consumption. */
-export const auditEvents = new AuditEventEmitter();
+/** Global event emitter for SSE consumption. Survives HMR in dev mode. */
+const globalForAudit = globalThis as typeof globalThis & { __auditEvents?: AuditEventEmitter };
+export const auditEvents = globalForAudit.__auditEvents ??= new AuditEventEmitter();
