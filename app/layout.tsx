@@ -4,6 +4,8 @@ import "./globals.css";
 
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuditProvider } from "@/components/audit-context";
+import { ActivityPanelProvider } from "@/components/activity-panel-context";
+import { ActivityPanelWrapper } from "@/components/activity-panel-wrapper";
 import { AppSidebar } from "@/components/app-sidebar";
 import {
   SidebarProvider,
@@ -47,15 +49,18 @@ export default function RootLayout({
         >
           <TooltipProvider>
             <AuditProvider>
-              <SidebarProvider>
-                <AppSidebar />
-                <SidebarInset>
-                  <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-                    <SidebarTrigger className="-ml-1" />
-                  </header>
-                  <main className="flex-1 p-6">{children}</main>
-                </SidebarInset>
-              </SidebarProvider>
+              <ActivityPanelProvider>
+                <SidebarProvider>
+                  <AppSidebar />
+                  <SidebarInset className="flex flex-col h-screen">
+                    <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
+                      <SidebarTrigger className="-ml-1" />
+                    </header>
+                    <div className="flex-1 overflow-y-auto p-6">{children}</div>
+                    <ActivityPanelWrapper />
+                  </SidebarInset>
+                </SidebarProvider>
+              </ActivityPanelProvider>
             </AuditProvider>
           </TooltipProvider>
         </ThemeProvider>

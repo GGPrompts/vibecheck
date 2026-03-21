@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Compass, Settings, Activity } from "lucide-react"
+import { LayoutDashboard, Compass, Settings, Activity, Terminal } from "lucide-react"
 
 import {
   Sidebar,
@@ -18,6 +18,7 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { useActivityPanel } from "@/components/activity-panel-context"
 
 const navItems = [
   {
@@ -39,6 +40,7 @@ const navItems = [
 
 export function AppSidebar() {
   const pathname = usePathname()
+  const { visible: activityVisible, toggle: toggleActivity } = useActivityPanel()
 
   return (
     <Sidebar>
@@ -71,7 +73,16 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarSeparator />
-      <SidebarFooter className="px-4 py-3">
+      <SidebarFooter className="px-4 py-3 space-y-2">
+        <button
+          onClick={toggleActivity}
+          className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent ${
+            activityVisible ? "text-foreground bg-accent" : "text-muted-foreground"
+          }`}
+        >
+          <Terminal className="h-4 w-4" />
+          <span>Activity</span>
+        </button>
         <div className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground">Theme</span>
           <ThemeToggle />
