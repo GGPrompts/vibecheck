@@ -7,6 +7,7 @@ import { getEnabledModules, getAllModules } from './registry';
 import { computeOverallScore } from './scoring';
 import { readVibecheckRc, mergeWithRc } from '@/lib/config/vibecheckrc';
 import { getProfileConfig } from '@/lib/config/profiles';
+import { readSettings } from '@/lib/config/settings';
 import { classifyFiles } from '@/lib/metadata/classifier';
 import { detectLanguages, type RepoLanguages, type Language } from '@/lib/metadata/language-detector';
 import type { ModuleResult } from './types';
@@ -108,14 +109,24 @@ export async function runScan(
 
   // Read per-repo .vibecheckrc and merge with incoming config
   const rc = readVibecheckRc(repoPath);
+
+  // Determine the active profile: .vibecheckrc > global config.json > default 'team'
+  const globalSettings = readSettings();
+  const activeProfile = rc?.profile ?? globalSettings.profile ?? 'team';
+
+  // Apply profile as a base layer — explicit rc.modules/thresholds override profile defaults
+  const profileCfg = getProfileConfig(activeProfile);
   if (rc) {
-    // Apply profile as a base layer — explicit rc.modules/thresholds override profile defaults
-    if (rc.profile) {
-      const profileCfg = getProfileConfig(rc.profile);
-      rc.modules = { ...profileCfg.modules, ...rc.modules };
-      rc.thresholds = { ...profileCfg.thresholds, ...rc.thresholds };
-    }
+    rc.modules = { ...profileCfg.modules, ...rc.modules };
+    rc.thresholds = { ...profileCfg.thresholds, ...rc.thresholds };
+    rc.profile = activeProfile;
     config = mergeWithRc(config, rc);
+  } else {
+    // No .vibecheckrc — apply global profile directly
+    config = mergeWithRc(config, {
+      modules: profileCfg.modules,
+      thresholds: profileCfg.thresholds,
+    });
   }
 
   // Detect repo languages for module filtering
