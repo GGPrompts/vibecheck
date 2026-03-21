@@ -52,7 +52,7 @@ export interface EvaluationResult {
   reasons: string[];
 }
 
-export interface AuditFinding {
+interface AuditFinding {
   severity: string;
   file: string;
   line?: number;

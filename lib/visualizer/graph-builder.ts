@@ -7,7 +7,6 @@ import { buildFromRegex } from './regex-builder';
 import type { NodeAttrs, EdgeAttrs } from './graph-types';
 
 // Re-export types for consumers that imported them from this module
-export type { NodeAttrs, EdgeAttrs } from './graph-types';
 
 // ---------------------------------------------------------------------------
 // Public API

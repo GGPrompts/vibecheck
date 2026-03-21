@@ -5,7 +5,7 @@ import { join, relative, resolve, extname } from 'path';
 // Constants
 // ---------------------------------------------------------------------------
 
-export const SOURCE_EXTENSIONS = new Set([
+const SOURCE_EXTENSIONS = new Set([
   '.ts', '.tsx', '.js', '.jsx', '.mts', '.mjs', '.cts', '.cjs',
 ]);
 
@@ -108,7 +108,7 @@ const DYNAMIC_IMPORT_PATTERN = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 const NAMED_IMPORT_PATTERN =
   /import\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/g;
 
-export interface ParsedImport {
+interface ParsedImport {
   specifier: string;
   isDynamic: boolean;
   symbols: string[];

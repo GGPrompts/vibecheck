@@ -26,7 +26,7 @@ export interface LogEntry {
 
 // ── Level config ──
 
-export interface LevelConfig {
+interface LevelConfig {
   icon: LucideIcon
   color: string
   bg: string
@@ -136,7 +136,7 @@ export function mergeTextBlocks(blocks: StreamBlock[]): StreamBlock[] {
 
 // ── Format helpers ──
 
-export function formatTime(date: Date): string {
+function formatTime(date: Date): string {
   return date.toLocaleTimeString("en-US", {
     hour12: false,
     hour: "2-digit",

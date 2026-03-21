@@ -16,7 +16,6 @@ import { Toolbar, computeLevelCounts } from "@/components/activity-panel/toolbar
 import { StatusBar } from "@/components/activity-panel/status-bar"
 
 // Re-export types for consumers
-export type { LogLevel, LogEntry }
 
 // ── Constants ──
 

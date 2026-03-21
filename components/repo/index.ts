@@ -8,5 +8,5 @@ export { VerdictBadge } from './verdict-badge';
 export { RepoLoadingSkeleton } from './loading-skeleton';
 export { EmptyState } from './empty-state';
 export { computeClientEvaluation, formatDuration, buildHotspotData, getBlockingFindings } from './evaluation-utils';
-export type { RepoData, ScanFinding, ScanModule, ScanDetail, EvaluationVerdict, EvaluationResult, AuditFinding, AuditModule, AuditDetail, AuditProvider, HotspotDataPoint } from './types';
+export type { RepoData, ScanFinding, ScanModule, ScanDetail, EvaluationVerdict, EvaluationResult, AuditModule, AuditDetail, AuditProvider, HotspotDataPoint } from './types';
 export { PROVIDER_LABELS } from './types';

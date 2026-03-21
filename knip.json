@@ -1,0 +1,13 @@
+{
+  "entry": [
+    "app/**/*.{ts,tsx}",
+    "bin/vibecheck.mjs",
+    "bin/headless-scan.ts",
+    "mcp-server/index.ts"
+  ],
+  "project": ["**/*.{ts,tsx,mjs}"],
+  "ignore": [
+    "lib/db/migrations/**",
+    "components/ui/**"
+  ]
+}
