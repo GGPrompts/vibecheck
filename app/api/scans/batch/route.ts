@@ -35,6 +35,9 @@ export async function POST(request: Request) {
 
     // Detach from route handler's async context so Next.js sends
     // the 202 response immediately instead of waiting for the scan.
+    // Delay 500ms to give the client time to open the SSE connection
+    // (POST response → React render → useEffect → EventSource → GET).
+    // The replay buffer in BatchEventEmitter handles any remaining race.
     setTimeout(() => {
       runBatchScan(repoIds, {
         enableAi: aiEnabled,
@@ -42,7 +45,7 @@ export async function POST(request: Request) {
       }).catch((err) => {
         console.error('Batch scan failed:', err);
       });
-    }, 0);
+    }, 500);
 
     return NextResponse.json({ batchId }, { status: 202 });
   } catch (error) {
@@ -102,14 +105,15 @@ export async function GET(request: Request) {
         }
       }
 
+      // Send keepalive before attaching listeners — replay may close the
+      // controller immediately if the batch already finished.
+      controller.enqueue(encoder.encode(': connected\n\n'));
+
       progressRef = onProgress;
       doneRef = onDone;
 
       batchEvents.onProgress(batchId, onProgress);
       batchEvents.onDone(batchId, onDone);
-
-      // Send an initial keepalive comment so the client knows we're connected
-      controller.enqueue(encoder.encode(': connected\n\n'));
     },
     cancel() {
       if (progressRef) {
