@@ -18,6 +18,7 @@ let noOpen = false;
 let showHelp = false;
 let promptMode = false;
 let jsonMode = false;
+let hookAction = null; // 'install' | 'uninstall'
 let modulesFilter = '';
 let threshold = 50;
 
@@ -31,6 +32,20 @@ for (let i = 0; i < args.length; i++) {
     promptMode = true;
   } else if (arg === '--json') {
     jsonMode = true;
+  } else if (arg === '--hook') {
+    const val = args[++i];
+    if (val !== 'install' && val !== 'uninstall') {
+      console.error('Error: --hook requires "install" or "uninstall"');
+      process.exit(1);
+    }
+    hookAction = val;
+  } else if (arg.startsWith('--hook=')) {
+    const val = arg.split('=')[1];
+    if (val !== 'install' && val !== 'uninstall') {
+      console.error('Error: --hook requires "install" or "uninstall"');
+      process.exit(1);
+    }
+    hookAction = val;
   } else if (arg === '--modules') {
     const val = args[++i];
     if (!val) {
@@ -92,6 +107,8 @@ Options:
   --modules <ids>       Run only specific modules (comma-separated)
   --threshold <number>  Score threshold for exit code (default: 50)
                         Exit 0 if score >= threshold, exit 1 if below
+  --hook install        Install a git post-commit hook that records health scores
+  --hook uninstall      Remove the vibecheck post-commit hook
   -h, --help            Show this help message
 
 Headless mode (--prompt or --json):
@@ -107,6 +124,8 @@ Examples:
   npx vibecheck . --json --threshold 70
   npx vibecheck . --prompt --modules complexity,security
   npx vibecheck . --json --modules git-health,dependencies --threshold 60
+  npx vibecheck . --hook install
+  npx vibecheck . --hook uninstall
 `);
   process.exit(0);
 }
@@ -130,14 +149,39 @@ if (!existsSync(repoPath)) {
   process.exit(1);
 }
 
-// ── Database: register repo if not exists ────────────────────────────────────
-
-// We use better-sqlite3 directly to avoid needing the full Next.js/drizzle
-// setup. This mirrors the logic in lib/db/client.ts and app/api/repos/route.ts.
+// ── Resolve project root ─────────────────────────────────────────────────────
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const projectRoot = resolve(__dirname, '..');
+
+// ── Hook install/uninstall ───────────────────────────────────────────────────
+
+if (hookAction) {
+  const tsxBin = join(projectRoot, 'node_modules', '.bin', 'tsx');
+  const hookScript = join(projectRoot, 'bin', 'hook-action.ts');
+
+  const child = spawn(tsxBin, [hookScript, hookAction, repoPath], {
+    cwd: projectRoot,
+    stdio: 'inherit',
+  });
+
+  child.on('error', (err) => {
+    console.error(`Failed to run hook ${hookAction}: ${err.message}`);
+    process.exit(1);
+  });
+
+  child.on('exit', (code) => {
+    process.exit(code ?? 0);
+  });
+
+  // Don't fall through to the rest of the CLI
+} else {
+
+// ── Database: register repo if not exists ────────────────────────────────────
+
+// We use better-sqlite3 directly to avoid needing the full Next.js/drizzle
+// setup. This mirrors the logic in lib/db/client.ts and app/api/repos/route.ts.
 
 const require = createRequire(import.meta.url);
 const Database = require('better-sqlite3');
@@ -407,3 +451,5 @@ if (promptMode || jsonMode) {
     }
   }, 30000);
 }
+
+} // end hookAction else

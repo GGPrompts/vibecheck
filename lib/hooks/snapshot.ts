@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 import { existsSync, mkdirSync, appendFileSync, readFileSync } from 'fs';
 import { join } from 'path';
+import { fileURLToPath } from 'url';
 
 export interface HealthSnapshot {
   commit: string;
@@ -54,8 +55,10 @@ function getCurrentCommit(repoPath: string): string {
  * Take a health snapshot for the current commit.
  * Runs only static modules (skips AI), enforces a 30-second timeout,
  * and appends the result to .vibecheck/commit-health.jsonl.
+ *
+ * @returns The snapshot that was recorded.
  */
-async function takeSnapshot(repoPath: string): Promise<HealthSnapshot> {
+export async function takeSnapshot(repoPath: string): Promise<HealthSnapshot> {
   // Import here to avoid circular dependency issues and ensure modules are registered
   const { runFastScan } = await import('@/lib/modules/orchestrator');
   await import('@/lib/modules/register-all');
@@ -65,7 +68,7 @@ async function takeSnapshot(repoPath: string): Promise<HealthSnapshot> {
 
   // Compute delta from previous snapshot
   const previous = getLastSnapshot(repoPath);
-  const delta = previous ? overall - previous.overall : 0;
+  const delta = previous ? +(overall - previous.overall).toFixed(1) : 0;
 
   const snapshot: HealthSnapshot = {
     commit,
@@ -90,7 +93,7 @@ async function takeSnapshot(repoPath: string): Promise<HealthSnapshot> {
 }
 
 /**
- * CLI entry point: run as `node snapshot.js <repoPath>`.
+ * CLI entry point: run as `npx tsx snapshot.ts <repoPath>`.
  * Designed to be called from the git post-commit hook.
  * Must NOT block — errors are logged silently.
  */
@@ -110,7 +113,8 @@ async function main() {
   }
 }
 
-// Run if invoked directly
-if (require.main === module) {
+// Run if invoked directly (works with tsx / ESM)
+const isDirectRun = process.argv[1] === fileURLToPath(import.meta.url);
+if (isDirectRun) {
   main().catch(() => process.exit(0));
 }

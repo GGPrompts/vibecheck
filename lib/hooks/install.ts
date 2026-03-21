@@ -1,5 +1,8 @@
 import { existsSync, readFileSync, writeFileSync, unlinkSync, chmodSync, mkdirSync } from 'fs';
-import { join, resolve } from 'path';
+import { join, resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __hooks_dirname = dirname(fileURLToPath(import.meta.url));
 
 const HOOK_MARKER = '# vibecheck post-commit hook';
 
@@ -13,7 +16,7 @@ function getHookPath(repoPath: string): string {
  */
 function buildHookScript(repoPath: string): string {
   // Resolve the vibecheck project root (two levels up from lib/hooks/)
-  const vibecheckRoot = resolve(__dirname, '..', '..');
+  const vibecheckRoot = resolve(__hooks_dirname, '..', '..');
   const snapshotScript = join(vibecheckRoot, 'lib', 'hooks', 'snapshot.ts');
 
   return [
