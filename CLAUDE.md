@@ -84,9 +84,14 @@ npx vibecheck /path/to/repo --json --threshold 70
 npm run dev
 ```
 
+## Portability
+
+This project is designed to eventually be embeddable as a section in personal-homepage. Key principles: thin API routes over fat lib functions, props-driven components, lazy-loaded heavy deps (Sigma.js, Nivo), SQLite as single source of truth. See `docs/portability.md` for the full guide and checklist.
+
 ## Folder Docs
 
 Each major directory has its own CLAUDE.md with implementation details:
+- `docs/portability.md` — Guide for embedding VibeCheck in other apps
 - `mcp-server/CLAUDE.md` — MCP tool definitions and usage
 - `lib/modules/CLAUDE.md` — Module system, how to add new modules
 - `lib/visualizer/CLAUDE.md` — Architecture visualizer data layer
