@@ -2,7 +2,8 @@
   "mcpServers": {
     "vibecheck": {
       "command": "npx",
-      "args": ["tsx", "/home/builder/projects/vibecheck/mcp-server/index.ts"]
+      "args": ["tsx", "/data/data/com.termux/files/home/projects/vibecheck/mcp-server/index.ts"],
+      "cwd": "/data/data/com.termux/files/home/projects/vibecheck"
     }
   }
 }
