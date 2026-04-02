@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from 'fs';
 import { basename, join } from 'path';
 import { nanoid } from 'nanoid';
 import { db } from '@/lib/db/client';
-import { repos, scans } from '@/lib/db/schema';
+import { repos, scans, moduleResults, findings as findingsTable } from '@/lib/db/schema';
 
 /** Standard MCP tool response type. */
 export type ToolResponse = { content: Array<{ type: 'text'; text: string }> };
@@ -65,6 +65,87 @@ export function getLatestScan(repoId: string) {
     .orderBy(desc(scans.createdAt))
     .limit(1)
     .get();
+}
+
+/**
+ * Get the most recent completed scans for a repo, newest first.
+ */
+export function getCompletedScans(repoId: string, limit = 2) {
+  return db
+    .select()
+    .from(scans)
+    .where(and(eq(scans.repoId, repoId), eq(scans.status, 'completed')))
+    .orderBy(desc(scans.createdAt))
+    .limit(limit)
+    .all();
+}
+
+export interface LoadedModuleResult {
+  id: string;
+  moduleId: string;
+  score: number;
+  confidence: number;
+  state: string;
+  stateReason: string | null;
+  summary: string | null;
+  metrics: Record<string, unknown> | null;
+  findings: Array<{
+    id: string;
+    fingerprint: string;
+    severity: string;
+    filePath: string | null;
+    line: number | null;
+    message: string;
+    category: string;
+    suggestion: string | null;
+    status: string;
+  }>;
+}
+
+/**
+ * Load a scan and all associated module results/findings.
+ */
+export function loadScanBundle(scanId: string): { scan: NonNullable<ReturnType<typeof getLatestScan>>; modules: LoadedModuleResult[] } | null {
+  const scan = db.select().from(scans).where(eq(scans.id, scanId)).get();
+  if (!scan) return null;
+
+  const results = db
+    .select()
+    .from(moduleResults)
+    .where(eq(moduleResults.scanId, scanId))
+    .all();
+
+  const modules = results.map((result) => {
+    const rows = db
+      .select()
+      .from(findingsTable)
+      .where(eq(findingsTable.moduleResultId, result.id))
+      .all();
+
+    return {
+      id: result.id,
+      moduleId: result.moduleId,
+      score: result.score,
+      confidence: result.confidence,
+      state: result.state,
+      stateReason: result.stateReason,
+      summary: result.summary,
+      metrics: result.metrics ? JSON.parse(result.metrics) : null,
+      findings: rows.map((finding) => ({
+        id: finding.id,
+        fingerprint: finding.fingerprint,
+        severity: finding.severity,
+        filePath: finding.filePath,
+        line: finding.line,
+        message: finding.message,
+        category: finding.category,
+        suggestion: finding.suggestion,
+        status: finding.status,
+      })),
+    };
+  });
+
+  return { scan, modules };
 }
 
 /**

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { z } from 'zod';
+import { normalizeProjectProfile, type ProjectProfile } from './profiles';
 
 /**
  * Minimal shape matching `ScanConfig` from the orchestrator.
@@ -35,11 +36,13 @@ const vibecheckRcSchema = z.object({
   /** Scan tier — controls model selection, parallelism, and coverage depth. */
   tier: z.enum(['pro', 'max', 'max-x20', 'api']).optional(),
 
-  /** Project profile — adjusts scoring, module selection, and thresholds for the project type. */
-  profile: z.enum(['solo', 'team', 'library', 'prototype', 'enterprise']).optional(),
+  /** Repo archetype — adjusts scoring, module selection, and thresholds for the repo shape. */
+  profile: z.string().optional(),
 });
 
-export type VibecheckRc = z.infer<typeof vibecheckRcSchema>;
+export interface VibecheckRc extends Omit<z.infer<typeof vibecheckRcSchema>, 'profile'> {
+  profile?: ProjectProfile;
+}
 
 // ── Reader ──────────────────────────────────────────────────────────────
 
@@ -73,7 +76,19 @@ export function readVibecheckRc(repoRoot: string): VibecheckRc | null {
       throw new Error(`Invalid ${name}:\n${issues}`);
     }
 
-    return result.data;
+    if (result.data.profile !== undefined) {
+      const normalizedProfile = normalizeProjectProfile(result.data.profile);
+      if (!normalizedProfile) {
+        throw new Error(`Invalid ${name}:\n  - profile: Unknown project profile`);
+      }
+      return {
+        ...result.data,
+        profile: normalizedProfile,
+      };
+    }
+
+    const { profile: _profile, ...rest } = result.data;
+    return rest;
   }
 
   return null;

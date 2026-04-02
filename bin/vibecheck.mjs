@@ -220,6 +220,8 @@ sqlite.exec(`
     module_id TEXT NOT NULL,
     score INTEGER NOT NULL,
     confidence REAL NOT NULL,
+    state TEXT NOT NULL DEFAULT 'completed',
+    state_reason TEXT,
     summary TEXT,
     metrics TEXT
   );

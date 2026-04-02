@@ -8,11 +8,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { PROFILES, type ProjectProfile } from "@/lib/config/profiles";
+import {
+  PROFILES,
+  getProfileLabel,
+  type ProjectProfile,
+} from "@/lib/config/profiles";
 
 const PROFILE_OPTIONS = (Object.keys(PROFILES) as ProjectProfile[]).map((key) => ({
   value: key,
-  label: key.charAt(0).toUpperCase() + key.slice(1),
+  label: getProfileLabel(key),
   description: PROFILES[key].description,
 }));
 
@@ -28,16 +32,15 @@ export function ProfileSelector({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Project Profile</CardTitle>
+        <CardTitle>Repo Archetype</CardTitle>
         <CardDescription>
-          Declare your project type so scoring adjusts automatically.
-          Different profiles disable irrelevant modules and relax or
-          tighten thresholds.
+          Override the auto-detected repo shape when you want different
+          module relevance and weighting defaults.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-2">
-          <Label htmlFor="project-profile">Profile</Label>
+          <Label htmlFor="project-profile">Archetype</Label>
           <select
             id="project-profile"
             value={projectProfile}
@@ -53,6 +56,9 @@ export function ProfileSelector({
         </div>
         <p className="text-xs text-muted-foreground">
           {PROFILE_OPTIONS.find((p) => p.value === projectProfile)?.description}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Auto-detect remains the default. Saving here sets a manual override in your global settings.
         </p>
       </CardContent>
     </Card>

@@ -5,6 +5,7 @@ import { nanoid } from 'nanoid';
 import { registerModule } from '../registry';
 import { generateFingerprint } from '../fingerprint';
 import type { ModuleRunner, ModuleResult, RunOptions, Finding, Severity } from '../types';
+import type { RepoTraits } from '@/lib/config/auto-detect';
 
 // ---------------------------------------------------------------------------
 // Pattern definitions
@@ -64,6 +65,18 @@ const SOURCE_EXTS = new Set([
   '.py', '.go', '.rs', '.rb', '.java', '.kt',
 ]);
 
+const DEFAULT_REPO_TRAITS: RepoTraits = {
+  hasApiRoutes: false,
+  hasFrontendBundle: false,
+  hasPackageLibraryShape: false,
+  hasTestSuite: false,
+  hasLongRunningServer: false,
+  hasDeployableService: false,
+  hasCliEntrypoint: false,
+  hasComplianceSignals: false,
+  hasAgentToolingSignals: false,
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -110,6 +123,41 @@ function collectApiRouteFiles(files: string[]): string[] {
   });
 }
 
+function getRepoTraits(opts: RunOptions): RepoTraits {
+  return opts.autoDetect?.repoTraits ?? DEFAULT_REPO_TRAITS;
+}
+
+function getDetectedArchetype(opts: RunOptions): string | null {
+  return opts.autoDetect?.detectedArchetype ?? null;
+}
+
+function isServiceLike(repoTraits: RepoTraits, archetype: string | null): boolean {
+  return Boolean(
+    repoTraits.hasApiRoutes
+    || repoTraits.hasLongRunningServer
+    || repoTraits.hasDeployableService
+    || archetype === 'web-app'
+    || archetype === 'api-service'
+    || archetype === 'compliance-sensitive',
+  );
+}
+
+function isFrontendLike(repoTraits: RepoTraits, archetype: string | null): boolean {
+  return Boolean(repoTraits.hasFrontendBundle || archetype === 'web-app');
+}
+
+function isLowInfraContext(archetype: string | null): boolean {
+  return archetype === 'cli' || archetype === 'library' || archetype === 'prototype';
+}
+
+function observabilityBaseline(repoTraits: RepoTraits, archetype: string | null): number {
+  if (isServiceLike(repoTraits, archetype)) return 20;
+  if (isFrontendLike(repoTraits, archetype)) return 35;
+  if (isLowInfraContext(archetype)) return 70;
+  if (archetype === 'agent-tooling') return 45;
+  return 50;
+}
+
 // ---------------------------------------------------------------------------
 // Runner
 // ---------------------------------------------------------------------------
@@ -123,8 +171,15 @@ const runner: ModuleRunner = {
   async run(repoPath: string, opts: RunOptions): Promise<ModuleResult> {
     opts.onProgress?.(5, 'Scanning for observability patterns...');
 
+    const repoTraits = getRepoTraits(opts);
+    const archetype = getDetectedArchetype(opts);
+    const serviceLike = isServiceLike(repoTraits, archetype);
+    const frontendLike = isFrontendLike(repoTraits, archetype);
+    const lowInfraContext = isLowInfraContext(archetype);
+    const observabilityRelevant = serviceLike || frontendLike || archetype === 'agent-tooling';
+
     const findings: Finding[] = [];
-    let score = 0; // Start at 0, add points for positive signals
+    let score = observabilityBaseline(repoTraits, archetype);
 
     // Track metrics for summary
     const metrics: Record<string, number> = {
@@ -138,6 +193,7 @@ const runner: ModuleRunner = {
       ciPipeline: 0,
       totalApiRoutes: 0,
     };
+    const neutralizedChecks: string[] = [];
 
     // ------------------------------------------------------------------
     // 1. Check package.json for structured logging & monitoring deps
@@ -186,13 +242,17 @@ const runner: ModuleRunner = {
         `Structured logging detected: ${foundLogLibs.join(', ')}`,
         'structured-logging',
       ));
-    } else {
+    } else if (observabilityRelevant) {
       findings.push(makeFinding(
-        'medium',
+        serviceLike ? 'medium' : 'low',
         'package.json',
-        'No structured logging library found. Console.log is not a logging strategy.',
+        serviceLike
+          ? 'No structured logging library found. This matters for a deployable service because console output disappears once the process crashes or scales out.'
+          : frontendLike
+            ? 'No structured logging library found. This still matters for a frontend or hybrid app because structured logs are easier to correlate with user-visible failures.'
+            : 'No structured logging library found. This matters for unattended agent/tooling workflows because plain console output is hard to correlate after the fact.',
         'structured-logging',
-        'Add a structured logger like pino or winston. Structured JSON logs are parseable by monitoring tools and AI agents.',
+        'Add a structured logger like pino or winston so logs stay searchable when this repo runs unattended or is deployed.',
       ));
     }
 
@@ -216,14 +276,20 @@ const runner: ModuleRunner = {
         `Monitoring integrations detected: ${foundMonitoring.join(', ')}`,
         'monitoring',
       ));
-    } else {
+    } else if (serviceLike || frontendLike || archetype === 'agent-tooling') {
       findings.push(makeFinding(
         'medium',
         'package.json',
-        'No monitoring or error tracking integration found (Sentry, DataDog, OpenTelemetry, etc.).',
+        serviceLike
+          ? 'No monitoring or error tracking integration found (Sentry, DataDog, OpenTelemetry, etc.). This matters because deployable services need a way to see runtime failures after the process exits.'
+          : 'No monitoring or error tracking integration found. This matters because user-facing apps and agent tooling benefit from crash and performance visibility when something fails outside the terminal.',
         'monitoring',
-        'Add an error tracking service like Sentry or OpenTelemetry to capture runtime errors and performance data.',
+        serviceLike
+          ? 'Add an error tracking service like Sentry or OpenTelemetry so runtime errors and latency regressions are observable outside the local console.'
+          : 'Add an error tracking service if this repo runs as a user-facing app or agent runtime; it makes failures diagnosable after the command returns.',
       ));
+    } else {
+      neutralizedChecks.push('monitoring');
     }
 
     // ------------------------------------------------------------------
@@ -325,14 +391,16 @@ const runner: ModuleRunner = {
         'Error boundary or crash handler detected.',
         'error-boundary',
       ));
-    } else {
+    } else if (frontendLike) {
       findings.push(makeFinding(
         'low',
         '.',
-        'No error boundaries or global crash handlers found.',
+        'No error boundaries or global crash handlers found. This matters for a React or hybrid frontend because it keeps UI crashes from taking down the whole experience.',
         'error-boundary',
-        'Add React ErrorBoundary components or global error handlers (process.on("uncaughtException")) to prevent silent failures.',
+        'Add React ErrorBoundary components or global error handlers to keep UI failures contained and easier to diagnose.',
       ));
+    } else {
+      neutralizedChecks.push('error-boundary');
     }
 
     // ------------------------------------------------------------------
@@ -347,14 +415,16 @@ const runner: ModuleRunner = {
         `Found ${healthEndpointCount} file(s) with health/readiness endpoint patterns.`,
         'health-endpoint',
       ));
-    } else {
+    } else if (serviceLike) {
       findings.push(makeFinding(
         'medium',
         '.',
-        'No health check endpoints (/health, /ready, /ping) detected.',
+        'No health check endpoints (/health, /ready, /ping) detected. This matters for deployable services because load balancers, uptime checks, and on-call workflows depend on a quick readiness signal.',
         'health-endpoint',
-        'Add a /health endpoint that returns service status. This enables uptime monitoring, load balancer checks, and AI agent self-diagnosis.',
+        'Add a /health endpoint so uptime monitoring and deployment probes can tell whether the service is alive.',
       ));
+    } else {
+      neutralizedChecks.push('health-endpoint');
     }
 
     // ------------------------------------------------------------------
@@ -388,9 +458,9 @@ const runner: ModuleRunner = {
         findings.push(makeFinding(
           apiRoutesWithoutTryCatch > apiRouteFiles.length / 2 ? 'high' : 'medium',
           unhandledRoutes[0] ?? '.',
-          `${apiRoutesWithoutTryCatch} of ${apiRouteFiles.length} API route(s) lack try/catch error handling (${pct}%).`,
+          `${apiRoutesWithoutTryCatch} of ${apiRouteFiles.length} API route(s) lack try/catch error handling (${pct}%). This matters because API routes are part of the runtime surface and should fail predictably.`,
           'api-error-handling',
-          `Adding structured error logging to your ${apiRoutesWithoutTryCatch} unhandled API route handler(s) would significantly improve observability.`,
+          `Wrap the ${apiRoutesWithoutTryCatch} route handler(s) in try/catch so failures stay observable and return structured errors instead of crashing.`,
         ));
       }
     }
@@ -442,14 +512,16 @@ const runner: ModuleRunner = {
         'CI/CD pipeline configuration detected — enables automated visibility into build and test results.',
         'ci-pipeline',
       ));
-    } else {
+    } else if (serviceLike || frontendLike || archetype === 'agent-tooling') {
       findings.push(makeFinding(
         'low',
         '.',
-        'No CI/CD pipeline configuration found.',
+        'No CI/CD pipeline configuration found. This matters here because deployable services and frontends need automated checks before changes reach users.',
         'ci-pipeline',
         'Add a CI pipeline (GitHub Actions, GitLab CI, etc.) to get automated feedback on every push.',
       ));
+    } else {
+      neutralizedChecks.push('ci-pipeline');
     }
 
     // ------------------------------------------------------------------
@@ -496,9 +568,20 @@ const runner: ModuleRunner = {
     if (metrics.ciPipeline > 0) positives.push('CI pipeline');
     if (metrics.instrumentationFile > 0) positives.push('instrumentation');
 
+    const contextParts = [
+      serviceLike ? 'service-like' : null,
+      frontendLike ? 'frontend-like' : null,
+      lowInfraContext ? 'low-infra' : null,
+      archetype === 'agent-tooling' ? 'agent-tooling' : null,
+    ].filter(Boolean);
+    const contextSuffix = contextParts.length > 0 ? ` Repo shape: ${contextParts.join(', ')}.` : '';
+    const neutralizedSuffix = neutralizedChecks.length > 0
+      ? ` Neutralized checks: ${neutralizedChecks.join(', ')}.`
+      : '';
+
     const summary = positives.length > 0
-      ? `Observability score ${score}/100. Detected: ${positives.join(', ')}. ${feedbackRating}.`
-      : `Observability score ${score}/100. No observability infrastructure detected. ${feedbackRating}.`;
+      ? `Observability score ${score}/100. Detected: ${positives.join(', ')}.${contextSuffix}${neutralizedSuffix} ${feedbackRating}.`
+      : `Observability score ${score}/100. No observability infrastructure detected.${contextSuffix}${neutralizedSuffix} ${feedbackRating}.`;
 
     return {
       score,

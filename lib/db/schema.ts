@@ -33,6 +33,8 @@ export const moduleResults = sqliteTable('module_results', {
   moduleId: text('module_id').notNull(),
   score: integer('score').notNull(),
   confidence: real('confidence').notNull(),
+  state: text('state').notNull().default('completed'),
+  stateReason: text('state_reason'),
   summary: text('summary'),
   metrics: text('metrics'),
 });
@@ -46,6 +48,7 @@ export const findings = sqliteTable('findings', {
   line: integer('line'),
   message: text('message').notNull(),
   category: text('category').notNull(),
+  suggestion: text('suggestion'),
   status: text('status').notNull().default('new'),
 });
 

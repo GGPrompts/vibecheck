@@ -6,7 +6,19 @@
  */
 
 export { vibecheckScanInput, handleVibecheckScan } from './tools/scan.js';
-export { vibecheckHealthInput, handleVibecheckHealth } from './tools/health.js';
-export { vibecheckPromptInput, handleVibecheckPrompt } from './tools/prompt.js';
+export {
+  vibecheckHealthInput,
+  vibecheckModuleInput,
+  vibecheckCompareInput,
+  handleVibecheckHealth,
+  handleVibecheckModule,
+  handleVibecheckCompare,
+} from './tools/health.js';
+export {
+  vibecheckPromptInput,
+  vibecheckNextActionsInput,
+  handleVibecheckPrompt,
+  handleVibecheckNextActions,
+} from './tools/prompt.js';
 export { vibecheckFindingsInput, handleVibecheckFindings } from './tools/findings.js';
 export { vibecheckSettingsInput, handleVibecheckSettings } from './tools/settings.js';

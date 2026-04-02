@@ -42,6 +42,7 @@ import './type-safety';
 import './secrets-scan';
 import './config-quality';
 import './telemetry-observability';
+import './execution-checks';
 
 // New AI-powered modules
 import './doc-accuracy';

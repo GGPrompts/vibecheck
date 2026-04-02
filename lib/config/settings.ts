@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { normalizeProjectProfile, type LegacyProjectProfile, type ProjectProfile } from './profiles';
 
 const VIBECHECK_DIR = join(homedir(), '.vibecheck');
 const CONFIG_PATH = join(VIBECHECK_DIR, 'config.json');
@@ -9,7 +10,7 @@ interface Settings {
   scanDirs?: string[];
   auditPrompts?: Record<string, string>;
   tier?: 'pro' | 'max' | 'max-x20' | 'api';
-  profile?: 'solo' | 'team' | 'library' | 'prototype' | 'enterprise';
+  profile?: ProjectProfile | LegacyProjectProfile;
 }
 
 /**
@@ -49,9 +50,11 @@ export function readSettings(): Settings {
     if (typeof parsed.tier === 'string' && (validTiers as readonly string[]).includes(parsed.tier)) {
       result.tier = parsed.tier as Settings['tier'];
     }
-    const validProfiles = ['solo', 'team', 'library', 'prototype', 'enterprise'] as const;
-    if (typeof parsed.profile === 'string' && (validProfiles as readonly string[]).includes(parsed.profile)) {
-      result.profile = parsed.profile as Settings['profile'];
+    if (typeof parsed.profile === 'string') {
+      const normalized = normalizeProjectProfile(parsed.profile);
+      if (normalized) {
+        result.profile = normalized;
+      }
     }
     return result;
   } catch {

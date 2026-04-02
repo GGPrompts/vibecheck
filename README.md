@@ -4,10 +4,11 @@ Codebase health scanner with AI-powered audits and a living architecture visuali
 
 ## Features
 
-**14 Analysis Modules**
-- Static: security vulnerabilities, outdated deps, complexity, dead code, circular deps, test coverage, compliance rules, custom AST patterns
+**Expanded Module Coverage**
+- Static: security vulnerabilities, outdated deps, complexity, dead code, circular deps, test coverage, compliance rules, custom AST patterns, config quality, secrets scanning, type safety, telemetry/observability
+- Deterministic execution checks: build, lint, typecheck, and test command verification when the repo exposes them
 - Runtime: live API endpoint testing (crashes, missing validation, slow responses)
-- AI-powered: naming quality, documentation staleness, architectural smells, test quality (via Claude)
+- AI-powered: naming quality, documentation staleness, architectural smells, test quality, doc accuracy, error handling, and context conflicts
 
 **Architecture Visualizer**
 - Interactive force-directed dependency graph (Sigma.js + WebGL)
@@ -19,8 +20,9 @@ Codebase health scanner with AI-powered audits and a living architecture visuali
 - Filter by health, architectural layer, or text search
 
 **Project Profiles**
-- Solo, Team, Library, Prototype, Enterprise presets
-- Auto-adjust scoring thresholds and module enables per project type
+- Archetypes: Web App, API Service, Library, CLI, Agent Tooling, Prototype, and Compliance Sensitive
+- Legacy `solo`, `team`, and `enterprise` config values still normalize to the newer archetypes
+- Auto-adjust scoring thresholds and module enables per repo shape
 
 **Scan Tiers**
 - Pro (Haiku, sampled), Max (Sonnet, full), Max x20 (Sonnet + Opus verify), API (token-budgeted)
@@ -68,7 +70,7 @@ Use vibecheck as an MCP tool server in Claude Code:
 }
 ```
 
-Tools: `vibecheck_scan`, `vibecheck_health`, `vibecheck_prompt`, `vibecheck_findings`
+Tools: `vibecheck_scan`, `vibecheck_health`, `vibecheck_module`, `vibecheck_compare`, `vibecheck_prompt`, `vibecheck_next_actions`, `vibecheck_findings`, `vibecheck_settings`
 
 ## Configuration
 
@@ -76,7 +78,7 @@ Tools: `vibecheck_scan`, `vibecheck_health`, `vibecheck_prompt`, `vibecheck_find
 
 ```json
 {
-  "profile": "solo",
+  "profile": "prototype",
   "tier": "max",
   "modules": { "git-health": false },
   "thresholds": { "complexity": 80 },
@@ -92,7 +94,7 @@ Tools: `vibecheck_scan`, `vibecheck_health`, `vibecheck_prompt`, `vibecheck_find
 {
   "scanDirs": ["/home/user/projects"],
   "tier": "max",
-  "profile": "team"
+  "profile": "web-app"
 }
 ```
 
@@ -114,6 +116,7 @@ Static modules are JS/TS-focused (complexity, dead-code, circular-deps). AI audi
 ```bash
 npm install
 npm run dev          # Start dev server on :3000
+npm test             # Fast local contract + policy tests
 npm run build        # Production build
 npm run db:generate  # Generate drizzle migrations
 npm run db:migrate   # Apply migrations

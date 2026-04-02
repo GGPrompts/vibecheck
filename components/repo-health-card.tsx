@@ -8,13 +8,16 @@ import { Button } from "@/components/ui/button";
 import { ScoreGauge } from "@/components/score-gauge";
 import { ScanProgress } from "@/components/scan-progress";
 import { Badge } from "@/components/ui/badge";
+import { getProfileLabel, normalizeProjectProfile } from "@/lib/config/profiles";
 
 const PROFILE_COLORS: Record<string, string> = {
-  solo: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  team: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  "web-app": "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+  "api-service": "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
   library: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+  cli: "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400",
+  "agent-tooling": "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
   prototype: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
-  enterprise: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+  "compliance-sensitive": "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
 };
 
 // Module-level cache so all cards share one fetch
@@ -26,15 +29,20 @@ function fetchGlobalProfile(): Promise<string> {
   _profilePromise = fetch("/api/settings")
     .then((res) => res.json())
     .then((data): string => {
-      const p: string = data.profile ?? "team";
+      const p: string = data.profile ?? "web-app";
       _profileCache = p;
       return p;
     })
     .catch((): string => {
-      _profileCache = "team";
-      return "team";
+      _profileCache = "web-app";
+      return "web-app";
     });
   return _profilePromise;
+}
+
+function formatProfile(profile: string): string {
+  const normalized = normalizeProjectProfile(profile);
+  return normalized ? getProfileLabel(normalized) : profile;
 }
 
 interface Repo {
@@ -240,10 +248,10 @@ export function RepoHealthCard({ repo, onScanComplete, onActiveToggle, onRemove 
           {profile && (
             <span
               className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium shrink-0 ${
-                PROFILE_COLORS[profile] ?? PROFILE_COLORS.team
+                PROFILE_COLORS[profile] ?? PROFILE_COLORS["web-app"]
               }`}
             >
-              {profile}
+              {formatProfile(profile)}
             </span>
           )}
           {isEvaluation && (

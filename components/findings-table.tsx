@@ -16,6 +16,7 @@ import {
   Diamond,
   Info,
   Circle,
+  Lightbulb,
   ArrowUpDown,
   Filter,
 } from 'lucide-react';
@@ -30,6 +31,7 @@ interface FindingRow {
   message: string;
   category: string;
   status: string;
+  suggestion?: string | null;
   moduleId?: string;
 }
 
@@ -155,6 +157,14 @@ export function FindingsTable({ findings }: FindingsTableProps) {
     );
   }, [findings]);
 
+  const statusCounts = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const finding of findings) {
+      counts[finding.status] = (counts[finding.status] ?? 0) + 1;
+    }
+    return counts;
+  }, [findings]);
+
   // Filter
   const filtered = React.useMemo(() => {
     return findings.filter((f) => {
@@ -254,6 +264,27 @@ export function FindingsTable({ findings }: FindingsTableProps) {
         </span>
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        {statuses.map((status) => {
+          const active = statusFilter === status;
+          return (
+            <button
+              key={status}
+              type="button"
+              onClick={() => setStatusFilter(active ? 'all' : status)}
+              className={cn(
+                'rounded-full border px-2.5 py-1 text-xs transition-colors',
+                active
+                  ? 'border-foreground bg-foreground text-background'
+                  : 'border-border text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {status} {statusCounts[status] ?? 0}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Table */}
       <Table>
         <TableHeader>
@@ -261,7 +292,7 @@ export function FindingsTable({ findings }: FindingsTableProps) {
             <SortableHeader field="severity" onToggle={toggleSort}>Severity</SortableHeader>
             <SortableHeader field="filePath" onToggle={toggleSort}>File</SortableHeader>
             <SortableHeader field="line" onToggle={toggleSort}>Line</SortableHeader>
-            <SortableHeader field="message" onToggle={toggleSort}>Message</SortableHeader>
+            <SortableHeader field="message" onToggle={toggleSort}>Message / Suggestion</SortableHeader>
             <SortableHeader field="moduleId" onToggle={toggleSort}>Module</SortableHeader>
             <SortableHeader field="status" onToggle={toggleSort}>Status</SortableHeader>
           </TableRow>
@@ -291,8 +322,20 @@ export function FindingsTable({ findings }: FindingsTableProps) {
                 <TableCell className="font-mono text-xs">
                   {f.line ?? '-'}
                 </TableCell>
-                <TableCell className="max-w-[320px] truncate text-xs" title={f.message}>
-                  {f.message}
+                <TableCell className="max-w-[320px] text-xs">
+                  <div className="space-y-1">
+                    <p className="truncate" title={f.message}>
+                      {f.message}
+                    </p>
+                    {f.suggestion && (
+                      <p className="flex items-start gap-1 text-muted-foreground">
+                        <Lightbulb className="mt-0.5 size-3 shrink-0" />
+                        <span className="line-clamp-2" title={f.suggestion}>
+                          {f.suggestion}
+                        </span>
+                      </p>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell className="text-xs">{f.moduleId ?? '-'}</TableCell>
                 <TableCell>

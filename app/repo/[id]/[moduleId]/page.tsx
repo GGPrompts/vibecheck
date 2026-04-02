@@ -34,6 +34,7 @@ interface FindingData {
   message: string;
   category: string;
   status: string;
+  suggestion?: string | null;
   moduleId?: string;
 }
 
@@ -42,9 +43,19 @@ interface ModuleData {
   moduleId: string;
   score: number;
   confidence: number;
+  state?: string;
+  stateReason?: string | null;
   summary: string | null;
   metrics: Record<string, number> | null;
   findings: FindingData[];
+}
+
+function formatStateLabel(state: string | undefined): string {
+  if (!state) return 'Completed';
+  return state
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 export default function ModulePage() {
@@ -152,6 +163,7 @@ export default function ModulePage() {
     .join(' ');
 
   const confidencePct = Math.round(moduleData.confidence * 100);
+  const isScored = !moduleData.state || moduleData.state === 'completed';
 
   return (
     <div className="space-y-8">
@@ -165,15 +177,23 @@ export default function ModulePage() {
 
       {/* Module header */}
       <div className="flex items-start gap-6">
-        <ScoreGauge score={moduleData.score} size={120} />
+        <ScoreGauge score={isScored ? moduleData.score : null} size={120} />
         <div className="space-y-3">
           <h1 className="text-3xl font-bold tracking-tight">{moduleName}</h1>
           <div className="flex items-center gap-3">
             <Badge variant="secondary">{confidencePct}% confidence</Badge>
+            <Badge variant={isScored ? 'outline' : 'secondary'}>
+              {formatStateLabel(moduleData.state)}
+            </Badge>
             <span className="text-sm text-muted-foreground">
               {moduleData.findings.length} findings
             </span>
           </div>
+          {moduleData.stateReason && (
+            <p className="text-sm text-muted-foreground max-w-2xl">
+              {moduleData.stateReason}
+            </p>
+          )}
           {moduleData.summary && (
             <p className="text-sm text-muted-foreground max-w-2xl">
               {moduleData.summary}

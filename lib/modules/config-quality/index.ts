@@ -15,6 +15,30 @@ const severityDeductions: Record<Severity, number> = {
   info: 1,
 };
 
+function getArchetype(opts: RunOptions): string | null {
+  return opts.autoDetect?.detectedArchetype ?? null;
+}
+
+function isPrototypeLike(archetype: string | null): boolean {
+  return archetype === 'prototype';
+}
+
+function softenSeverity(severity: Severity, archetype: string | null): Severity {
+  if (!isPrototypeLike(archetype)) return severity;
+  switch (severity) {
+    case 'critical':
+      return 'high';
+    case 'high':
+      return 'medium';
+    case 'medium':
+      return 'low';
+    case 'low':
+      return 'info';
+    case 'info':
+      return 'info';
+  }
+}
+
 function makeFinding(
   severity: Severity,
   filePath: string,
@@ -129,7 +153,7 @@ function checkTsconfig(repoPath: string): Finding[] {
   return findings;
 }
 
-function checkPackageJson(repoPath: string): Finding[] {
+function checkPackageJson(repoPath: string, archetype: string | null): Finding[] {
   const findings: Finding[] = [];
   const pkgPath = join(repoPath, 'package.json');
 
@@ -155,11 +179,13 @@ function checkPackageJson(repoPath: string): Finding[] {
   if (!pkg.description) {
     findings.push(
       makeFinding(
-        'low',
+        softenSeverity('low', archetype),
         'package.json',
-        'Missing "description" field in package.json',
+        archetype === 'prototype'
+          ? 'Missing "description" field in package.json. Prototypes can be rough, but a short description still helps future contributors and agents understand the repo shape.'
+          : 'Missing "description" field in package.json. This matters for shared packages, CLIs, and services because the metadata is the first clue consumers and agents see.',
         'package-json',
-        'Add a brief project description to package.json.'
+        'Add a brief project description to package.json so consumers and agents can tell what the repo is for.'
       )
     );
   }
@@ -167,9 +193,11 @@ function checkPackageJson(repoPath: string): Finding[] {
   if (!pkg.license) {
     findings.push(
       makeFinding(
-        'low',
+        softenSeverity('low', archetype),
         'package.json',
-        'Missing "license" field in package.json',
+        archetype === 'prototype'
+          ? 'Missing "license" field in package.json. This is easy to defer in a throwaway prototype, but it matters once the repo is shared or published.'
+          : 'Missing "license" field in package.json. This matters for reusable packages and internal tooling because downstream consumers need to know how the code may be used.',
         'package-json',
         'Specify a license (e.g., "MIT", "Apache-2.0") in package.json.'
       )
@@ -179,9 +207,11 @@ function checkPackageJson(repoPath: string): Finding[] {
   if (!pkg.engines) {
     findings.push(
       makeFinding(
-        'info',
+        softenSeverity('info', archetype),
         'package.json',
-        'Missing "engines" field in package.json',
+        archetype === 'prototype'
+          ? 'Missing "engines" field in package.json. That is optional for a prototype, but it becomes important once you want reproducible installs or CI.'
+          : 'Missing "engines" field in package.json. This matters for CLIs, libraries, and services because runtime version mismatches are a common source of "works on my machine" bugs.',
         'package-json',
         'Define the Node.js version range in "engines" to avoid compatibility surprises.'
       )
@@ -198,9 +228,11 @@ function checkPackageJson(repoPath: string): Finding[] {
   if (!hasLint) {
     findings.push(
       makeFinding(
-        'info',
+        softenSeverity('info', archetype),
         'package.json',
-        'No lint script found in package.json',
+        archetype === 'prototype'
+          ? 'No lint script found in package.json. That is usually acceptable for a prototype, but it becomes valuable once the repo starts getting contributions.'
+          : 'No lint script found in package.json. This matters for packages, CLIs, and services because automated linting keeps the codebase stable for humans and agents.',
         'package-json',
         'Add a "lint" script to enforce code style automatically.'
       )
@@ -213,9 +245,11 @@ function checkPackageJson(repoPath: string): Finding[] {
   if (!hasTest) {
     findings.push(
       makeFinding(
-        'info',
+        softenSeverity('info', archetype),
         'package.json',
-        'No test script found in package.json',
+        archetype === 'prototype'
+          ? 'No test script found in package.json. A prototype can skip a test harness temporarily, but the gap should be closed before the repo becomes reusable.'
+          : 'No test script found in package.json. This matters for reusable packages, CLIs, and services because tests are the cheapest regression guard.',
         'package-json',
         'Add a "test" script to run your test suite.'
       )
@@ -226,9 +260,11 @@ function checkPackageJson(repoPath: string): Finding[] {
   if (!hasBuild) {
     findings.push(
       makeFinding(
-        'info',
+        softenSeverity('info', archetype),
         'package.json',
-        'No build script found in package.json',
+        archetype === 'prototype'
+          ? 'No build script found in package.json. Prototypes can defer a build step, but that usually changes once the repo needs repeatable releases or CI.'
+          : 'No build script found in package.json. This matters for packages, CLIs, and deployable services because it gives CI and other tools one stable entrypoint.',
         'package-json',
         'Add a "build" script if your project requires a compilation step.'
       )
@@ -452,7 +488,7 @@ function checkDockerfile(repoPath: string): Finding[] {
   return findings;
 }
 
-function checkCiConfig(repoPath: string): Finding[] {
+function checkCiConfig(repoPath: string, archetype: string | null): Finding[] {
   const findings: Finding[] = [];
 
   const ciPaths = [
@@ -490,12 +526,12 @@ function checkCiConfig(repoPath: string): Finding[] {
     }
   }
 
-  if (!hasCi) {
+  if (!hasCi && archetype !== 'prototype') {
     findings.push(
       makeFinding(
         'medium',
         '.',
-        'No CI/CD configuration found',
+        'No CI/CD configuration found. This matters for shared packages, CLIs, and services because automated checks catch regressions before they ship.',
         'ci',
         'Add a CI config (e.g., .github/workflows/) to automate testing and deployment.'
       )
@@ -517,13 +553,14 @@ const runner: ModuleRunner = {
   async run(repoPath: string, opts: RunOptions): Promise<ModuleResult> {
     opts.onProgress?.(5, 'Checking configuration files...');
 
+    const archetype = getArchetype(opts);
     const findings: Finding[] = [];
 
     opts.onProgress?.(10, 'Checking tsconfig.json...');
     findings.push(...checkTsconfig(repoPath));
 
     opts.onProgress?.(25, 'Checking package.json...');
-    findings.push(...checkPackageJson(repoPath));
+    findings.push(...checkPackageJson(repoPath, archetype));
 
     opts.onProgress?.(40, 'Checking ESLint config...');
     findings.push(...checkEslintConfig(repoPath));
@@ -538,7 +575,7 @@ const runner: ModuleRunner = {
     findings.push(...checkDockerfile(repoPath));
 
     opts.onProgress?.(85, 'Checking CI configuration...');
-    findings.push(...checkCiConfig(repoPath));
+    findings.push(...checkCiConfig(repoPath, archetype));
 
     // Calculate score
     let score = 100;

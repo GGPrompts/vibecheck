@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { scans, moduleResults, findings } from '@/lib/db/schema';
+import { summarizeScoreResults } from '@/lib/modules/scoring';
 
 /**
  * GET /api/scans/[id] — Return a single scan with all module results and findings.
@@ -37,11 +38,15 @@ export async function GET(
         moduleId: result.moduleId,
         score: result.score,
         confidence: result.confidence,
+        state: result.state,
+        stateReason: result.stateReason,
         summary: result.summary,
         metrics: result.metrics ? JSON.parse(result.metrics) : null,
         findings: resultFindings,
       };
     });
+
+    const scoringSummary = summarizeScoreResults(modules);
 
     return NextResponse.json({
       scan: {
@@ -49,6 +54,7 @@ export async function GET(
         repoId: scan.repoId,
         status: scan.status,
         overallScore: scan.overallScore,
+        scoringSummary,
         durationMs: scan.durationMs,
         createdAt: scan.createdAt,
       },

@@ -68,6 +68,8 @@ export async function GET(
         moduleId: moduleResults.moduleId,
         score: moduleResults.score,
         confidence: moduleResults.confidence,
+        state: moduleResults.state,
+        stateReason: moduleResults.stateReason,
         summary: moduleResults.summary,
       })
       .from(moduleResults)

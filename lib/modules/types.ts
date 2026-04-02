@@ -1,6 +1,15 @@
+import type { RepoTraits } from '@/lib/config/auto-detect';
+import type { ProjectProfile } from '@/lib/config/profiles';
+
 export type ModuleCategory = 'static' | 'ai';
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
+export type ModuleRunState =
+  | 'completed'
+  | 'not_applicable'
+  | 'insufficient_evidence'
+  | 'skipped'
+  | 'unavailable';
 
 export interface ModuleDefinition {
   id: string;
@@ -17,6 +26,10 @@ export interface AutoDetectInfo {
   knipIgnorePatterns: string[];
   /** File roles that should suppress "unused file" dead-code warnings. */
   deadCodeExemptRoles: Set<string>;
+  /** Repo archetype inferred from repo shape heuristics. */
+  detectedArchetype?: ProjectProfile | null;
+  /** Repo traits used by modules to calibrate applicability. */
+  repoTraits?: RepoTraits;
 }
 
 export interface RunOptions {
@@ -43,6 +56,10 @@ export interface ModuleResult {
   score: number;
   /** Confidence from 0.0 to 1.0 */
   confidence: number;
+  /** Execution/applicability state for downstream consumers. */
+  state?: ModuleRunState;
+  /** Human-readable reason for non-completed states. */
+  stateReason?: string;
   findings: Finding[];
   metrics: Record<string, number>;
   summary: string;

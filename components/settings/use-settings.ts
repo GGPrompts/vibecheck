@@ -41,7 +41,7 @@ export function useSettings() {
   const [moduleTiers, setModuleTiers] = useState<Record<string, string>>({});
 
   // Project profile and scan tier
-  const [projectProfile, setProjectProfile] = useState<string>("team");
+  const [projectProfile, setProjectProfile] = useState<string>("web-app");
   const [scanTier, setScanTier] = useState<string>("pro");
 
   // Scan directories
@@ -158,7 +158,7 @@ export function useSettings() {
         setGlobalTier(data.modelOverrides.global ?? "sonnet");
         setModuleTiers(data.modelOverrides.modules ?? {});
       }
-      setProjectProfile(data.profile ?? "team");
+      setProjectProfile(data.profile ?? "web-app");
       setScanTier(data.tier ?? "pro");
     } catch {
       // Silently handle

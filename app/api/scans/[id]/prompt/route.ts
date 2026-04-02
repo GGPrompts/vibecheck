@@ -15,6 +15,7 @@ export async function GET(
     return NextResponse.json({
       prompt: result.prompt,
       estimated_tokens: result.estimated_tokens,
+      actions: result.actions,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -37,6 +38,7 @@ export async function POST(
     return NextResponse.json({
       prompt: result.prompt,
       estimated_tokens: result.estimated_tokens,
+      actions: result.actions,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

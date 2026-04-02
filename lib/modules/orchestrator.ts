@@ -6,7 +6,12 @@ import { scans, moduleResults, findings as findingsTable } from '@/lib/db/schema
 import { getEnabledModules, getAllModules } from './registry';
 import { computeOverallScore } from './scoring';
 import { readVibecheckRc, mergeWithRc } from '@/lib/config/vibecheckrc';
-import { getProfileConfig } from '@/lib/config/profiles';
+import {
+  getProfileConfig,
+  getProfileModuleWeight,
+  normalizeProjectProfile,
+  type ProjectProfile,
+} from '@/lib/config/profiles';
 import { readSettings } from '@/lib/config/settings';
 import { autoDetect } from '@/lib/config/auto-detect';
 import { classifyFiles } from '@/lib/metadata/classifier';
@@ -14,7 +19,7 @@ import { detectLanguages } from '@/lib/metadata/language-detector';
 import { getAllowedModulesForLanguages } from './language-filter';
 import { reconcileFindingStatuses } from './finding-reconciler';
 import type { AutoDetectResult } from '@/lib/config/auto-detect';
-import type { ModuleResult } from './types';
+import type { ModuleResult, ModuleRunState } from './types';
 import type { RegisteredModule } from './types';
 
 export interface ScanProgress {
@@ -48,6 +53,30 @@ export interface ScanConfig {
   weights?: Record<string, number>;
 }
 
+function getDisabledModules(profile: ProjectProfile): Record<string, boolean> {
+  const disabled: Record<string, boolean> = {};
+  for (const [moduleId, rule] of Object.entries(getProfileConfig(profile).modules)) {
+    if (rule.applicable === false) {
+      disabled[moduleId] = false;
+    }
+  }
+  return disabled;
+}
+
+function buildArchetypeWeights(
+  profile: ProjectProfile,
+  moduleIds: string[],
+): Record<string, number> {
+  const weights: Record<string, number> = {};
+  for (const moduleId of moduleIds) {
+    const weight = getProfileModuleWeight(profile, moduleId);
+    if (weight !== 1) {
+      weights[moduleId] = weight;
+    }
+  }
+  return weights;
+}
+
 /**
  * Run a full scan: execute all enabled modules against the given repo,
  * save results to the database, compute the overall score, and return the scan ID.
@@ -68,19 +97,20 @@ export async function runScan(
   const rc = readVibecheckRc(repoPath);
 
   // Determine the active profile with full priority chain:
-  //   .vibecheckrc > global config.json > auto-detected > default 'team'
+  //   .vibecheckrc > global config.json > auto-detected > default 'web-app'
   const globalSettings = readSettings();
   const activeProfile =
-    rc?.profile ??
-    globalSettings.profile ??
-    autoDetected.configOverlay.profile ??
-    'team';
+    normalizeProjectProfile(rc?.profile) ??
+    normalizeProjectProfile(globalSettings.profile) ??
+    normalizeProjectProfile(autoDetected.configOverlay.profile) ??
+    'web-app';
 
-  // Apply profile as a base layer -- explicit rc.modules/thresholds override profile defaults.
-  // Auto-detected thresholds are the lowest layer: auto-detect -> profile -> rc -> explicit.
+  // Apply archetype defaults as a base layer -- explicit rc.modules/thresholds override archetype defaults.
+  // Auto-detected thresholds are the lowest layer: auto-detect -> archetype -> rc -> explicit.
   const profileCfg = getProfileConfig(activeProfile);
+  const disabledModules = getDisabledModules(activeProfile);
   if (rc) {
-    rc.modules = { ...profileCfg.modules, ...rc.modules };
+    rc.modules = { ...disabledModules, ...rc.modules };
     rc.thresholds = {
       ...autoDetected.configOverlay.thresholds,
       ...profileCfg.thresholds,
@@ -89,9 +119,9 @@ export async function runScan(
     rc.profile = activeProfile;
     config = mergeWithRc(config, rc);
   } else {
-    // No .vibecheckrc -- apply auto-detect + profile directly
+    // No .vibecheckrc -- apply auto-detect + archetype directly
     config = mergeWithRc(config, {
-      modules: profileCfg.modules,
+      modules: disabledModules,
       thresholds: {
         ...autoDetected.configOverlay.thresholds,
         ...profileCfg.thresholds,
@@ -101,7 +131,11 @@ export async function runScan(
 
   // Detect repo languages for module filtering
   const repoLanguages = detectLanguages(repoPath);
-  const allowedByLanguage = getAllowedModulesForLanguages(repoLanguages);
+  const allowedByLanguage = getAllowedModulesForLanguages(
+    repoLanguages,
+    activeProfile,
+    autoDetected.repoTraits,
+  );
 
   // Collect modules explicitly enabled by .vibecheckrc (these bypass language filtering)
   const rcExplicitEnables = new Set<string>();
@@ -118,6 +152,8 @@ export async function runScan(
     autoDetected: {
       framework: autoDetected.detectedFramework,
       suggestedProfile: autoDetected.suggestedProfile,
+      detectedArchetype: autoDetected.detectedArchetype,
+      repoTraits: autoDetected.repoTraits,
       knipEntryPoints: autoDetected.knipEntryPoints,
     },
   };
@@ -158,6 +194,18 @@ export async function runScan(
     enabledModules, repoPath, scanId, fileRoles, ignorePatterns, autoDetected,
   );
 
+  const archetypeWeights = buildArchetypeWeights(
+    activeProfile,
+    enabledModules.map((m) => m.definition.id),
+  );
+  config = {
+    ...config,
+    weights: {
+      ...archetypeWeights,
+      ...(config?.weights ?? {}),
+    },
+  };
+
   // ── Fingerprint-based status tracking ──
   await reconcileFindingStatuses(scanId, repoId);
 
@@ -173,6 +221,22 @@ interface ResultSummary {
   moduleId: string;
   score: number;
   confidence: number;
+}
+
+function buildSyntheticResult(
+  state: ModuleRunState,
+  summary: string,
+  stateReason: string,
+): ModuleResult {
+  return {
+    score: -1,
+    confidence: 0,
+    state,
+    stateReason,
+    findings: [],
+    metrics: {},
+    summary,
+  };
 }
 
 /**
@@ -203,6 +267,16 @@ async function executeModules(
     try {
       const canRun = await runner.canRun(repoPath);
       if (!canRun) {
+        saveModuleResult(
+          scanId,
+          definition.id,
+          buildSyntheticResult(
+            'not_applicable',
+            `${definition.name} skipped (not applicable)`,
+            'Module not applicable to this repository or current scan context.',
+          ),
+          ignorePatterns,
+        );
         scanEvents.emitProgress({
           scanId,
           moduleId: definition.id,
@@ -224,10 +298,12 @@ async function executeModules(
           });
         },
         fileRoles,
-        autoDetect: {
-          knipEntryPoints: autoDetected.knipEntryPoints,
-          knipIgnorePatterns: autoDetected.knipIgnorePatterns,
-          deadCodeExemptRoles: autoDetected.deadCodeExemptRoles,
+      autoDetect: {
+        detectedArchetype: autoDetected.detectedArchetype,
+        repoTraits: autoDetected.repoTraits,
+        knipEntryPoints: autoDetected.knipEntryPoints,
+        knipIgnorePatterns: autoDetected.knipIgnorePatterns,
+        deadCodeExemptRoles: autoDetected.deadCodeExemptRoles,
         },
       });
 
@@ -249,6 +325,17 @@ async function executeModules(
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
+
+      saveModuleResult(
+        scanId,
+        definition.id,
+        buildSyntheticResult(
+          'unavailable',
+          `${definition.name} failed: ${errorMessage}`,
+          errorMessage,
+        ),
+        ignorePatterns,
+      );
 
       scanEvents.emitProgress({
         scanId,
@@ -280,6 +367,8 @@ function saveModuleResult(
     moduleId,
     score: result.score,
     confidence: result.confidence,
+    state: result.state ?? 'completed',
+    stateReason: result.stateReason ?? null,
     summary: result.summary,
     metrics: JSON.stringify(result.metrics),
   }).run();
@@ -305,6 +394,7 @@ function saveModuleResult(
         line: finding.line ?? null,
         message: finding.message,
         category: finding.category,
+        suggestion: finding.suggestion ?? null,
         status: 'new',
       }).run();
     }
@@ -351,6 +441,11 @@ function finalizeScan(
 export async function runFastScan(
   repoPath: string
 ): Promise<{ scores: Record<string, number>; overall: number }> {
+  const autoDetected = autoDetect(repoPath);
+  const activeProfile =
+    normalizeProjectProfile(autoDetected.detectedArchetype) ??
+    normalizeProjectProfile(autoDetected.configOverlay.profile) ??
+    'web-app';
   const allModules = getAllModules();
   const staticModules: RegisteredModule[] = allModules.filter(
     (m) => m.definition.category === 'static'
@@ -402,6 +497,9 @@ export async function runFastScan(
     }
   }
 
-  const overall = computeOverallScore(resultSummaries);
+  const overall = computeOverallScore(
+    resultSummaries,
+    buildArchetypeWeights(activeProfile, staticModules.map((m) => m.definition.id)),
+  );
   return { scores, overall };
 }

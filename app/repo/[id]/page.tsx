@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScanProgress } from '@/components/scan-progress';
 import { AuditProgress } from '@/components/audit-progress';
 import { FindingsTable } from '@/components/findings-table';
+import { PromptOutput } from '@/components/prompt-output';
 import {
   RepoHeader,
   AdoptionAssessment,
@@ -160,8 +161,13 @@ export default function RepoPage() {
   if (!repo) return null;
 
   const allFindings: ScanFinding[] = scanDetail?.modules.flatMap((m) => m.findings) ?? [];
-  const modulesPassing = scanDetail?.modules.filter((m) => m.score > 60).length ?? 0;
-  const totalModules = scanDetail?.modules.length ?? 0;
+  const scoringSummary = scanDetail?.scan.scoringSummary;
+  const modulesPassing = scoringSummary?.passing
+    ?? scanDetail?.modules.filter((m) => m.state === 'completed' && m.score > 60).length
+    ?? 0;
+  const totalModules = scoringSummary?.scored
+    ?? scanDetail?.modules.filter((m) => m.state === 'completed').length
+    ?? 0;
   const evaluationResult = isEvaluation && scanDetail ? computeClientEvaluation(scanDetail.modules) : null;
   const hotspotData = scanDetail ? buildHotspotData(scanDetail) : [];
   const blockingFindings = isEvaluation ? getBlockingFindings(allFindings) : [];
@@ -215,7 +221,22 @@ export default function RepoPage() {
       )}
 
       {scanDetail && scanDetail.modules.length > 0 && (
-        <ModuleGrid repoId={id} modules={scanDetail.modules} />
+        <ModuleGrid
+          repoId={id}
+          modules={scanDetail.modules}
+          scoringSummary={scanDetail.scan.scoringSummary}
+        />
+      )}
+
+      {scanDetail && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Agent Handoff</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <PromptOutput scanId={scanDetail.scan.id} defaultView="actions" />
+          </CardContent>
+        </Card>
       )}
 
       {scanDetail && scanDetail.modules.length > 0 && (

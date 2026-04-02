@@ -13,7 +13,7 @@ import { existsSync, readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { join, posix, sep } from 'path';
 import type { VibecheckRc } from './vibecheckrc';
-import type { ProjectProfile } from './profiles';
+import { type ProjectProfile, normalizeProjectProfile } from './profiles';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -30,11 +30,29 @@ export interface AutoDetectResult {
   /** Suggested project profile based on git contributor count. */
   suggestedProfile: ProjectProfile | null;
 
+  /** Repo archetype inferred from repo shape and package/layout signals. */
+  detectedArchetype: ProjectProfile | null;
+
+  /** High-level repo traits used for module applicability decisions. */
+  repoTraits: RepoTraits;
+
   /** Detected framework name (for logging/debugging). */
   detectedFramework: string | null;
 
   /** Config overlay to merge as the lowest-priority layer. */
   configOverlay: VibecheckRc;
+}
+
+export interface RepoTraits {
+  hasApiRoutes: boolean;
+  hasFrontendBundle: boolean;
+  hasPackageLibraryShape: boolean;
+  hasTestSuite: boolean;
+  hasLongRunningServer: boolean;
+  hasDeployableService: boolean;
+  hasCliEntrypoint: boolean;
+  hasComplianceSignals: boolean;
+  hasAgentToolingSignals: boolean;
 }
 
 // ── Entrypoint directory patterns ──────────────────────────────────────
@@ -129,6 +147,69 @@ const FRAMEWORK_DEFS: FrameworkDef[] = [
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────
+
+const TRAIT_PATHS = {
+  apiRoutes: ['app/api', 'pages/api', 'server/api', 'src/server/api'],
+  frontendBundle: ['app', 'pages', 'components', 'src/components', 'public'],
+  packageLibrary: ['src', 'lib'],
+  testSuite: ['test', 'tests', '__tests__', 'spec', 'specs', 'e2e', 'integration'],
+  longRunningServer: ['server', 'src/server', 'app/server'],
+  cliEntrypoint: ['bin', 'cli', 'scripts'],
+  complianceSignals: [
+    'compliance',
+    'security',
+    'audit',
+    'policy',
+    'hipaa',
+    'gdpr',
+    'soc2',
+    'privacy',
+  ],
+  agentToolingSignals: [
+    'mcp-server',
+    'prompts',
+    'prompt',
+    'agents',
+    'playbooks',
+    '.codex-plugin',
+  ],
+} as const;
+
+const DEPLOYMENT_FILES = [
+  'Dockerfile',
+  'docker-compose.yml',
+  'docker-compose.yaml',
+  'vercel.json',
+  'fly.toml',
+  'render.yaml',
+  'railway.toml',
+  'Procfile',
+] as const;
+
+function pathExists(repoPath: string, relativePath: string): boolean {
+  return existsSync(join(repoPath, relativePath));
+}
+
+function anyPathExists(repoPath: string, paths: readonly string[]): boolean {
+  return paths.some((p) => pathExists(repoPath, p));
+}
+
+function getPackageScripts(
+  pkg: Record<string, unknown> | null,
+): Record<string, string> {
+  if (!pkg || typeof pkg.scripts !== 'object' || pkg.scripts === null || Array.isArray(pkg.scripts)) {
+    return {};
+  }
+  const scripts: Record<string, string> = {};
+  for (const [key, value] of Object.entries(pkg.scripts as Record<string, unknown>)) {
+    if (typeof value === 'string') scripts[key] = value;
+  }
+  return scripts;
+}
+
+function scriptMatches(scripts: Record<string, string>, names: string[], pattern: RegExp): boolean {
+  return names.some((name) => pattern.test(scripts[name] ?? ''));
+}
 
 function toPosix(p: string): string {
   return sep === '/' ? p : p.split(sep).join(posix.sep);
@@ -260,6 +341,92 @@ function detectFramework(
   return null;
 }
 
+function detectRepoTraits(repoPath: string, pkg: Record<string, unknown> | null, framework: FrameworkDef | null): RepoTraits {
+  const scripts = getPackageScripts(pkg);
+
+  const hasApiRoutes = anyPathExists(repoPath, TRAIT_PATHS.apiRoutes);
+  const hasFrontendBundle = anyPathExists(repoPath, TRAIT_PATHS.frontendBundle)
+    || framework?.name === 'nextjs'
+    || framework?.name === 'remix'
+    || framework?.name === 'nuxt'
+    || framework?.name === 'vite';
+  const hasPackageLibraryShape = Boolean(
+    pkg && (
+      typeof pkg.exports === 'object'
+      || typeof pkg.exports === 'string'
+      || typeof pkg.main === 'string'
+      || typeof pkg.module === 'string'
+      || typeof pkg.source === 'string'
+    ),
+  );
+  const hasTestSuite = anyPathExists(repoPath, TRAIT_PATHS.testSuite)
+    || scriptMatches(scripts, ['test', 'test:ci', 'coverage', 'check'], /(vitest|jest|playwright|cypress|coverage|test)/i);
+  const hasLongRunningServer = anyPathExists(repoPath, TRAIT_PATHS.longRunningServer)
+    || scriptMatches(scripts, ['start', 'serve', 'dev'], /(node|tsx|ts-node|nodemon|next|nuxt|vite|express|fastify|hono|webpack)/i);
+  const hasDeployableService = hasApiRoutes
+    || hasLongRunningServer
+    || anyPathExists(repoPath, DEPLOYMENT_FILES);
+  const hasCliEntrypoint = Boolean(
+    anyPathExists(repoPath, TRAIT_PATHS.cliEntrypoint)
+    || typeof pkg?.bin === 'string'
+    || (pkg?.bin && typeof pkg.bin === 'object' && !Array.isArray(pkg.bin)),
+  );
+  const hasComplianceSignals = anyPathExists(repoPath, TRAIT_PATHS.complianceSignals)
+    || Boolean(
+      pkg
+      && typeof pkg.name === 'string'
+      && /(compliance|security|audit|policy|hipaa|gdpr|soc2|privacy)/i.test(pkg.name),
+    );
+  const hasAgentToolingSignals = anyPathExists(repoPath, TRAIT_PATHS.agentToolingSignals)
+    || anyPathExists(repoPath, ['mcp-server', 'app/api/mcp', 'src/mcp']);
+
+  return {
+    hasApiRoutes,
+    hasFrontendBundle,
+    hasPackageLibraryShape,
+    hasTestSuite,
+    hasLongRunningServer,
+    hasDeployableService,
+    hasCliEntrypoint,
+    hasComplianceSignals,
+    hasAgentToolingSignals,
+  };
+}
+
+function detectArchetype(
+  framework: FrameworkDef | null,
+  traits: RepoTraits,
+  contributorCount: number,
+): ProjectProfile {
+  if (traits.hasComplianceSignals) return 'compliance-sensitive';
+  if (traits.hasAgentToolingSignals) return 'agent-tooling';
+  if (traits.hasCliEntrypoint && !traits.hasFrontendBundle && !traits.hasApiRoutes) return 'cli';
+  if (
+    traits.hasPackageLibraryShape
+    && !traits.hasFrontendBundle
+    && !traits.hasApiRoutes
+    && !traits.hasLongRunningServer
+    && !traits.hasCliEntrypoint
+  ) {
+    return 'library';
+  }
+  if (framework?.name === 'nextjs' || framework?.name === 'remix' || framework?.name === 'nuxt') {
+    return 'web-app';
+  }
+  if (framework?.name === 'express' || framework?.name === 'fastify' || framework?.name === 'hono') {
+    return 'api-service';
+  }
+  if (traits.hasApiRoutes || traits.hasDeployableService || traits.hasLongRunningServer) {
+    return traits.hasFrontendBundle ? 'web-app' : 'api-service';
+  }
+  if (traits.hasFrontendBundle) return 'web-app';
+
+  // Tiny repos with no strong service/library signals default to prototype.
+  if (contributorCount <= 1) return 'prototype';
+
+  return 'prototype';
+}
+
 /**
  * Count unique git contributors in the last 6 months.
  * Returns 0 if git is unavailable or the repo is not a git repo.
@@ -287,16 +454,13 @@ function countGitContributors(repoPath: string): number {
 }
 
 /**
- * Suggest a project profile based on contributor count.
- * Returns null if we cannot determine (let the user or profile system decide).
+ * Suggest a fallback archetype based on contributor count.
+ * Returns null if we cannot determine (let the user or repo-shape detection decide).
  */
 function suggestProfile(contributorCount: number): ProjectProfile | null {
   if (contributorCount === 0) return null; // can't determine
-  if (contributorCount === 1) return 'solo';
-  if (contributorCount <= 4) return 'team';
-  // 5+ contributors suggests a larger team, but "team" is still appropriate
-  // Enterprise requires explicit opt-in (compliance, etc.)
-  return 'team';
+  if (contributorCount === 1) return 'prototype';
+  return 'web-app';
 }
 
 // ── Main ───────────────────────────────────────────────────────────────
@@ -325,6 +489,10 @@ export function autoDetect(repoPath: string): AutoDetectResult {
   const framework = detectFramework(repoPath, pkg);
   const frameworkEntryPatterns = framework?.entryPatterns ?? [];
 
+  const repoTraits = detectRepoTraits(repoPath, pkg, framework);
+  const contributorCount = countGitContributors(repoPath);
+  const detectedArchetype = detectArchetype(framework, repoTraits, contributorCount);
+
   // Combine all entry points (deduplicated)
   const knipEntryPoints = Array.from(
     new Set([...pkgEntryPoints, ...dirPatterns, ...frameworkEntryPatterns]),
@@ -344,16 +512,17 @@ export function autoDetect(repoPath: string): AutoDetectResult {
     'api-route',
   ]);
 
-  // 5. Count git contributors and suggest profile
-  const contributorCount = countGitContributors(repoPath);
+  // 5. Count git contributors and keep the old signal around as a tie-breaker.
   const suggestedProfileValue = suggestProfile(contributorCount);
 
   // 6. Build the config overlay
   const configOverlay: VibecheckRc = {};
 
-  // Only suggest a profile -- don't override if already set
-  if (suggestedProfileValue) {
-    configOverlay.profile = suggestedProfileValue;
+  // The archetype is the lowest-priority profile hint; explicit config wins.
+  if (detectedArchetype) {
+    configOverlay.profile = detectedArchetype;
+  } else if (suggestedProfileValue) {
+    configOverlay.profile = normalizeProjectProfile(suggestedProfileValue) ?? suggestedProfileValue;
   }
 
   // Apply framework-specific threshold adjustments
@@ -366,6 +535,8 @@ export function autoDetect(repoPath: string): AutoDetectResult {
     knipIgnorePatterns,
     deadCodeExemptRoles,
     suggestedProfile: suggestedProfileValue,
+    detectedArchetype,
+    repoTraits,
     detectedFramework: framework?.name ?? null,
     configOverlay,
   };

@@ -14,6 +14,7 @@ Module Orchestrator (lib/modules/orchestrator.ts)
   |-- Static modules: security, dependencies, complexity, git-health,
   |                    dead-code, circular-deps, test-coverage,
   |                    compliance, ast-rules, api-health,
+  |                    build, lint, typecheck, test,
   |                    type-safety, secrets-scan, config-quality
   |-- AI modules:     naming-quality, doc-staleness, arch-smells, test-quality,
   |                    doc-accuracy, context-conflicts, error-handling
@@ -37,7 +38,7 @@ MCP Server (mcp-server/) — 4 tools for Claude Code integration
 ## Key Concepts
 
 - **Modules** — 20 analysis modules (static + AI). Each has `canRun()`, `run()`, returns score 0-100 with findings. Registered in `lib/modules/register-all.ts`.
-- **Profiles** — Project type presets (solo/team/library/prototype/enterprise) that adjust module enables + thresholds. Defined in `lib/config/profiles.ts`.
+- **Profiles** — Repo archetypes (`web-app`, `api-service`, `library`, `cli`, `agent-tooling`, `prototype`, `compliance-sensitive`) with auto-detect plus manual override. Legacy `solo`, `team`, and `enterprise` values normalize to `prototype`, `web-app`, and `compliance-sensitive`. Defined in `lib/config/profiles.ts`.
 - **Tiers** — Scan depth presets (pro/max/max-x20/api) controlling model selection, parallelism, and coverage. Defined in `lib/config/tiers.ts`.
 - **File Roles** — Auto-detected file classifications (api-route, ui-kit, barrel-file, etc.) that adjust scoring per module. Built by `lib/metadata/classifier.ts`.
 - **Findings** — Individual issues found by modules, tracked across scans with fingerprinting (new/recurring/fixed/regressed).
@@ -67,6 +68,10 @@ Repo-level `.vibecheckrc` overrides global `~/.vibecheck/config.json`. Profile c
 - Findings are fingerprinted for dedup across scans
 - AI modules require `ANTHROPIC_API_KEY` env var
 - Module results include `confidence` (0.0-1.0) alongside `score` (0-100)
+- Module results also carry execution state metadata: `completed`, `not_applicable`, `insufficient_evidence`, `skipped`, or `unavailable`
+- `canRun() === false` should be persisted as `not_applicable` instead of disappearing from scan output
+- Deterministic execution checks now live in the module system as `build`, `lint`, `typecheck`, and `test`; if the project does not expose a command, the module should stay neutral via `not_applicable`
+- Archetype auto-detect uses repo-shape heuristics such as `app/api` or `pages/api` for service shape, `bin` or `package.json#bin` for CLI shape, package entry exports for library shape, deploy files plus long-running scripts for deployable services, and `mcp-server` or prompt/agent directories for agent-tooling
 
 ## Running
 
@@ -82,7 +87,16 @@ npx vibecheck /path/to/repo --json --threshold 70
 
 # Dev server only
 npm run dev
+
+# Fast local tests
+npm test
 ```
+
+## Test Harness
+
+- Unit tests use Node's built-in `node:test` runner with `tsx` as the TypeScript loader.
+- Keep new fixtures deterministic and filesystem-local; avoid DB or network setup unless the contract under test genuinely requires it.
+- For MCP payload checks, prefer exporting a small pure payload builder over stubbing live DB helpers.
 
 ## Portability
 

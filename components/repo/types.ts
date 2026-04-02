@@ -19,6 +19,7 @@ export interface ScanFinding {
   message: string;
   category: string;
   status: string;
+  suggestion?: string | null;
   moduleId?: string;
 }
 
@@ -27,6 +28,8 @@ export interface ScanModule {
   moduleId: string;
   score: number;
   confidence: number;
+  state?: string;
+  stateReason?: string | null;
   summary: string | null;
   metrics: Record<string, number> | null;
   findings: ScanFinding[];
@@ -38,6 +41,14 @@ export interface ScanDetail {
     repoId: string;
     status: string;
     overallScore: number | null;
+    scoringSummary?: {
+      total: number;
+      scored: number;
+      passing: number;
+      notApplicable: number;
+      neutral: number;
+      unavailable: number;
+    };
     durationMs: number | null;
     createdAt: string;
   };

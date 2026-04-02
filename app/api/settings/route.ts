@@ -4,6 +4,7 @@ import { db } from '@/lib/db/client';
 import { scanConfigs } from '@/lib/db/schema';
 import { readSettings, writeSettings } from '@/lib/config/settings';
 import { hasApiKey, readEnvValue, writeEnvValue, writeApiKey } from '@/lib/config/env';
+import { normalizeProjectProfile, type ProjectProfile } from '@/lib/config/profiles';
 
 /**
  * GET /api/settings — Return current settings.
@@ -39,7 +40,7 @@ export async function GET() {
       aiTokenBudget: config?.aiTokenBudget ?? 100000,
       aiProvider: aiProvider ?? 'auto',
       modelOverrides: modelOverrides ?? null,
-      profile: configSettings.profile ?? 'team',
+      profile: normalizeProjectProfile(configSettings.profile) ?? 'web-app',
       tier: configSettings.tier ?? 'pro',
     });
   } catch (error) {
@@ -75,7 +76,7 @@ export async function PUT(request: Request) {
       weights?: Record<string, number>;
       aiProvider?: 'api' | 'cli' | 'auto' | 'codex';
       modelOverrides?: { global?: string; modules?: Record<string, string> };
-      profile?: 'solo' | 'team' | 'library' | 'prototype' | 'enterprise';
+      profile?: ProjectProfile;
       tier?: 'pro' | 'max' | 'max-x20' | 'api';
     };
 
@@ -102,7 +103,7 @@ export async function PUT(request: Request) {
     // Handle profile and tier (stored in config.json)
     if (profile !== undefined || tier !== undefined) {
       const current = readSettings();
-      if (profile !== undefined) current.profile = profile;
+      if (profile !== undefined) current.profile = normalizeProjectProfile(profile) ?? 'web-app';
       if (tier !== undefined) current.tier = tier;
       writeSettings(current);
     }

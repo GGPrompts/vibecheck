@@ -1,6 +1,6 @@
 import type { PrioritizedFinding } from './prioritizer';
 
-interface PromptSection {
+export interface PromptSection {
   filePath: string;
   summary: string;
   details: string[];

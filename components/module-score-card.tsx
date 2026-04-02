@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { CheckCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, MinusCircle } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -17,6 +17,8 @@ interface ModuleScoreCardProps {
   name: string;
   score: number;
   confidence: number;
+  state?: string;
+  stateReason?: string | null;
   top3Findings: { id: string; message: string }[];
 }
 
@@ -57,14 +59,27 @@ function ConfidenceBadge({ confidence }: { confidence: number }) {
   );
 }
 
+function formatStateLabel(state: string | undefined): string | null {
+  if (!state || state === 'completed') return null;
+  return state
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 export function ModuleScoreCard({
   repoId,
   moduleId,
   name,
   score,
   confidence,
+  state,
+  stateReason,
   top3Findings,
 }: ModuleScoreCardProps) {
+  const stateLabel = formatStateLabel(state);
+  const isScored = !state || state === 'completed';
+
   return (
     <Link href={`/repo/${repoId}/${moduleId}`} className="block">
       <Card className="h-full transition-colors hover:bg-muted/30">
@@ -90,9 +105,25 @@ export function ModuleScoreCard({
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className={`text-3xl font-bold ${scoreColor(score)}`}>
-            {score}<span className="text-base font-normal text-muted-foreground">/100</span>
-          </div>
+          {isScored ? (
+            <div className={`text-3xl font-bold ${scoreColor(score)}`}>
+              {score}<span className="text-base font-normal text-muted-foreground">/100</span>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Badge variant="outline" className="gap-1 text-muted-foreground">
+                {state === 'unavailable' ? (
+                  <AlertTriangle className="size-3" />
+                ) : (
+                  <MinusCircle className="size-3" />
+                )}
+                {stateLabel}
+              </Badge>
+              <p className="text-sm text-muted-foreground">
+                {stateReason ?? 'This module was excluded from the overall score.'}
+              </p>
+            </div>
+          )}
           {top3Findings.length > 0 && (
             <ul className="space-y-1">
               {top3Findings.map((f) => (

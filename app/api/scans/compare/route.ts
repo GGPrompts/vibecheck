@@ -21,6 +21,8 @@ interface ModuleResultRow {
   moduleId: string;
   score: number;
   confidence: number;
+  state: string;
+  stateReason: string | null;
   summary: string | null;
   metrics: string | null;
 }
@@ -30,6 +32,8 @@ interface EnrichedModule {
   moduleId: string;
   score: number;
   confidence: number;
+  state: string;
+  stateReason: string | null;
   summary: string | null;
   metrics: Record<string, unknown> | null;
   findings: FindingRow[];
@@ -57,6 +61,8 @@ function loadScanWithModules(scanId: string) {
       moduleId: result.moduleId,
       score: result.score,
       confidence: result.confidence,
+      state: result.state,
+      stateReason: result.stateReason,
       summary: result.summary,
       metrics: result.metrics ? JSON.parse(result.metrics) : null,
       findings: resultFindings,
@@ -116,6 +122,8 @@ export async function GET(request: Request) {
           moduleId,
           scoreA: modA?.score ?? null,
           scoreB: modB?.score ?? null,
+          stateA: modA?.state ?? null,
+          stateB: modB?.state ?? null,
           delta:
             modA && modB ? modB.score - modA.score : null,
           summaryA: modA?.summary ?? null,

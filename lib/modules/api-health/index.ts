@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid';
 import { registerModule } from '../registry';
 import { generateFingerprint } from '../fingerprint';
 import type { ModuleRunner, ModuleResult, RunOptions, Finding, Severity } from '../types';
+import type { RepoTraits } from '@/lib/config/auto-detect';
 import { detectRoutes, type DetectedRoute } from './route-detector';
 import { ensureDevServer } from './server';
 
@@ -27,6 +28,41 @@ const SEVERITY_DEDUCTIONS: Record<Severity, number> = {
   low: 3,
   info: 0,
 };
+
+const DEFAULT_REPO_TRAITS: RepoTraits = {
+  hasApiRoutes: false,
+  hasFrontendBundle: false,
+  hasPackageLibraryShape: false,
+  hasTestSuite: false,
+  hasLongRunningServer: false,
+  hasDeployableService: false,
+  hasCliEntrypoint: false,
+  hasComplianceSignals: false,
+  hasAgentToolingSignals: false,
+};
+
+function getRepoTraits(opts: RunOptions): RepoTraits {
+  return opts.autoDetect?.repoTraits ?? DEFAULT_REPO_TRAITS;
+}
+
+function getDetectedArchetype(opts: RunOptions): string | null {
+  return opts.autoDetect?.detectedArchetype ?? null;
+}
+
+function isServiceLike(repoTraits: RepoTraits, archetype: string | null): boolean {
+  return Boolean(
+    repoTraits.hasApiRoutes
+    || repoTraits.hasLongRunningServer
+    || repoTraits.hasDeployableService
+    || archetype === 'web-app'
+    || archetype === 'api-service'
+    || archetype === 'compliance-sensitive',
+  );
+}
+
+function isLowInfraContext(archetype: string | null): boolean {
+  return archetype === 'cli' || archetype === 'library' || archetype === 'prototype';
+}
 
 interface EndpointTestResult {
   route: string;
@@ -219,15 +255,32 @@ const runner: ModuleRunner = {
   async run(repoPath: string, opts: RunOptions): Promise<ModuleResult> {
     opts.onProgress?.(5, 'Detecting API routes...');
 
+    const repoTraits = getRepoTraits(opts);
+    const archetype = getDetectedArchetype(opts);
+    const serviceLike = isServiceLike(repoTraits, archetype);
+    const lowInfraContext = isLowInfraContext(archetype);
+
     const routes = detectRoutes(repoPath);
 
     if (routes.length === 0) {
+      if (lowInfraContext || !serviceLike) {
+        return {
+          score: -1,
+          confidence: 0.2,
+          findings: [],
+          metrics: { totalRoutes: 0, totalEndpoints: 0 },
+          summary: 'No API routes found and the repo does not look like a service-oriented app, so API health is neutral here.',
+          state: 'not_applicable',
+          stateReason: 'This repo shape does not appear to expose a meaningful API surface.',
+        };
+      }
+
       return {
         score: 100,
         confidence: 0.5,
         findings: [],
         metrics: { totalRoutes: 0, totalEndpoints: 0 },
-        summary: 'No API routes found in app/api/.',
+        summary: 'No API routes found in app/api/. For a service-oriented repo, that usually means the API surface is still scaffolding or missing.',
       };
     }
 

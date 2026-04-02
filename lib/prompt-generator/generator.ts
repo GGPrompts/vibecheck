@@ -12,16 +12,78 @@ import {
   prioritizeFindings,
   groupByFile,
   type EnrichedFinding,
+  type PrioritizedFinding,
 } from './prioritizer';
-import { selectTemplate, formatSection } from './templates';
+import { selectTemplate, formatSection, type PromptSection } from './templates';
 import { estimateTokens } from './token-estimator';
 import type { Severity } from '@/lib/modules/types';
 
 const MAX_FINDING_GROUPS = 10;
 
+export interface NextActionBundle {
+  file_path: string;
+  summary: string;
+  rationale: string;
+  details: string[];
+  suggested_actions: string[];
+  suggested_commands: string[];
+  modules: string[];
+  severities: Severity[];
+  task_type: 'deterministic' | 'exploratory';
+  finding_ids: string[];
+}
+
 interface GeneratePromptResult {
   prompt: string;
   estimated_tokens: number;
+  actions: NextActionBundle[];
+}
+
+function normalizeActionLine(action: string): string {
+  return action.replace(/^- /, '').trim();
+}
+
+function extractCommands(actions: string[]): string[] {
+  const commands = new Set<string>();
+  for (const action of actions) {
+    for (const match of action.matchAll(/`([^`]+)`/g)) {
+      commands.add(match[1]);
+    }
+  }
+  return Array.from(commands);
+}
+
+function deriveTaskType(
+  findings: PrioritizedFinding[],
+  commands: string[],
+): 'deterministic' | 'exploratory' {
+  if (commands.length > 0) return 'deterministic';
+  if (findings.some((f) => f.suggestion)) return 'deterministic';
+  if (findings.every((f) => ['security', 'dependencies', 'dead-code', 'dead-dependency', 'type-assertion', 'any-usage', 'ts-directive'].includes(f.category))) {
+    return 'deterministic';
+  }
+  return 'exploratory';
+}
+
+function buildActionBundle(
+  findings: PrioritizedFinding[],
+  section: PromptSection,
+): NextActionBundle {
+  const suggestedActions = section.actions.map(normalizeActionLine);
+  const suggestedCommands = extractCommands(suggestedActions);
+
+  return {
+    file_path: section.filePath,
+    summary: section.summary,
+    rationale: section.context,
+    details: section.details.map(normalizeActionLine),
+    suggested_actions: suggestedActions,
+    suggested_commands: suggestedCommands,
+    modules: Array.from(new Set(findings.map((f) => f.moduleId))),
+    severities: Array.from(new Set(findings.map((f) => f.severity))),
+    task_type: deriveTaskType(findings, suggestedCommands),
+    finding_ids: findings.map((f) => f.id),
+  };
 }
 
 /**
@@ -77,7 +139,7 @@ export async function generatePrompt(scanId: string): Promise<GeneratePromptResu
         line: f.line,
         message: f.message,
         category: f.category,
-        suggestion: null,
+        suggestion: f.suggestion,
         status: f.status,
         moduleId: result.moduleId,
         confidence: result.confidence,
@@ -98,7 +160,7 @@ export async function generatePrompt(scanId: string): Promise<GeneratePromptResu
       })
       .run();
 
-    return { prompt, estimated_tokens };
+    return { prompt, estimated_tokens, actions: [] };
   }
 
   // Prioritize and group
@@ -108,6 +170,7 @@ export async function generatePrompt(scanId: string): Promise<GeneratePromptResu
 
   // Build the prompt
   const sections: string[] = [];
+  const actions: NextActionBundle[] = [];
 
   // Header
   sections.push(
@@ -123,6 +186,7 @@ export async function generatePrompt(scanId: string): Promise<GeneratePromptResu
     const group = topGroups[i];
     const template = selectTemplate(group.findings);
     const section = template(group.findings);
+    actions.push(buildActionBundle(group.findings, section));
     sections.push(formatSection(i + 1, section));
     sections.push(''); // blank line between sections
   }
@@ -149,5 +213,5 @@ export async function generatePrompt(scanId: string): Promise<GeneratePromptResu
     })
     .run();
 
-  return { prompt: promptText, estimated_tokens };
+  return { prompt: promptText, estimated_tokens, actions };
 }
