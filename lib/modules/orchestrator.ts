@@ -269,7 +269,11 @@ async function executeModules(
     });
 
     try {
-      const canRun = await runner.canRun(repoPath);
+      // If a command override exists for this module, bypass canRun() since
+      // the default applicability check (e.g. "has package.json?") may not
+      // apply. The module's run() will handle the override or null.
+      const hasCommandOverride = commands != null && definition.id in commands;
+      const canRun = hasCommandOverride || await runner.canRun(repoPath);
       if (!canRun) {
         saveModuleResult(
           scanId,

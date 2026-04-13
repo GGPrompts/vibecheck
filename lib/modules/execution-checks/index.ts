@@ -4,7 +4,7 @@ import { join } from 'path';
 import { nanoid } from 'nanoid';
 import { registerModule } from '../registry';
 import { generateFingerprint } from '../fingerprint';
-import type { Finding, ModuleResult, ModuleRunner, RunOptions, Severity } from '../types';
+import type { Finding, ModuleResult, ModuleRunState, ModuleRunner, RunOptions, Severity } from '../types';
 
 interface PackageJson {
   scripts?: Record<string, string>;
@@ -177,6 +177,103 @@ function parseGenericOutput(
   return findings;
 }
 
+/**
+ * Parse non-JSON command output from arbitrary (non-JS) commands.
+ *
+ * Handles common compiler/linter output formats:
+ *   - file:line:col: message (gcc, rustc, clippy, go vet)
+ *   - file(line,col): message (tsc)
+ *   - Bare error/warning lines from stderr
+ *
+ * Falls back to collecting stderr lines as individual findings when no
+ * structured pattern matches.
+ */
+export function parseGenericCommandOutput(
+  moduleId: string,
+  stdout: string,
+  stderr: string,
+  exitCode: number,
+  category: string,
+  suggestion: string,
+): Finding[] {
+  const findings: Finding[] = [];
+  const combined = `${stdout}\n${stderr}`.trim();
+
+  if (!combined) {
+    if (exitCode !== 0) {
+      findings.push(
+        makeFinding(
+          moduleId,
+          'high',
+          '(command output)',
+          `Command exited with code ${exitCode} (no output captured)`,
+          category,
+          undefined,
+          suggestion,
+        ),
+      );
+    }
+    return findings;
+  }
+
+  for (const line of combined.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    // file:line:col: message (gcc, rustc, clippy, go vet, eslint default)
+    const colonStyle = trimmed.match(/^(.+?):(\d+):(\d+):\s*(.+)$/);
+    if (colonStyle) {
+      const msg = colonStyle[4];
+      const severity: Severity = /\berror\b/i.test(msg) ? 'high'
+        : /\bwarn(ing)?\b/i.test(msg) ? 'medium'
+        : 'high';
+      findings.push(
+        makeFinding(moduleId, severity, colonStyle[1], msg, category,
+          Number.parseInt(colonStyle[2], 10), suggestion),
+      );
+      continue;
+    }
+
+    // file(line,col): error/warning ... (tsc-style)
+    const tscStyle = trimmed.match(/^(.+)\((\d+),(\d+)\):\s*(.+)$/);
+    if (tscStyle) {
+      findings.push(
+        makeFinding(moduleId, 'high', tscStyle[1], tscStyle[4], category,
+          Number.parseInt(tscStyle[2], 10), suggestion),
+      );
+      continue;
+    }
+
+    // Rust-style: "error[E0308]: mismatched types" (no file, just a heading)
+    const rustHeading = trimmed.match(/^(error|warning)(\[E\d+\])?:\s*(.+)$/i);
+    if (rustHeading) {
+      const severity: Severity = /^error/i.test(rustHeading[1]) ? 'high' : 'medium';
+      findings.push(
+        makeFinding(moduleId, severity, '(command output)', trimmed, category,
+          undefined, suggestion),
+      );
+      continue;
+    }
+  }
+
+  // Fallback: if no structured lines matched, capture the first 8 lines as a single finding
+  if (findings.length === 0 && exitCode !== 0) {
+    findings.push(
+      makeFinding(
+        moduleId,
+        'high',
+        '(command output)',
+        combined.split('\n').slice(0, 8).join(' '),
+        category,
+        undefined,
+        suggestion,
+      ),
+    );
+  }
+
+  return findings;
+}
+
 function buildResult(
   ok: boolean,
   findings: Finding[],
@@ -193,14 +290,73 @@ function buildResult(
   };
 }
 
+function buildNotApplicableResult(moduleId: string, reason: string): ModuleResult {
+  return {
+    score: -1,
+    confidence: 0,
+    state: 'not_applicable' as ModuleRunState,
+    stateReason: reason,
+    findings: [],
+    metrics: {},
+    summary: `${moduleId} skipped (explicitly disabled via commands config)`,
+  };
+}
+
+/**
+ * Resolve the command to run for an execution-check module.
+ *
+ * Returns:
+ *   - `{ action: 'not_applicable' }` if explicitly set to null
+ *   - `{ action: 'run', command: string }` if an override is provided
+ *   - `{ action: 'fallback' }` if no override is set (use default logic)
+ */
+function resolveCommand(
+  moduleId: string,
+  opts: RunOptions,
+): { action: 'not_applicable' } | { action: 'run'; command: string } | { action: 'fallback' } {
+  if (!opts.commands || !(moduleId in opts.commands)) {
+    return { action: 'fallback' };
+  }
+  const cmd = opts.commands[moduleId];
+  if (cmd === null) {
+    return { action: 'not_applicable' };
+  }
+  return { action: 'run', command: cmd };
+}
+
 function createBuildRunner(): ModuleRunner {
   return {
     async canRun(repoPath: string) {
+      // canRun is called before opts are available, so we only check
+      // the default condition here. The command override is checked in run().
       const pkg = readPackageJson(repoPath);
       return !!pkg?.scripts?.build;
     },
     async run(repoPath: string, opts: RunOptions) {
+      const resolved = resolveCommand('build', opts);
+      if (resolved.action === 'not_applicable') {
+        return buildNotApplicableResult('build', 'Build command explicitly set to null in .vibecheckrc');
+      }
+
       opts.onProgress?.(20, 'Running build command...');
+
+      if (resolved.action === 'run') {
+        const result = runCommand(resolved.command, repoPath);
+        const findings = result.ok
+          ? []
+          : parseGenericCommandOutput(
+              'build', result.stdout, result.stderr, result.exitCode,
+              'build', 'Fix the build failure and rerun the build command.',
+            );
+        return buildResult(
+          result.ok, findings,
+          { exitCode: result.exitCode, errors: findings.length },
+          'Build passed successfully.',
+          `Build failed with ${findings.length || 1} diagnostic${findings.length === 1 ? '' : 's'}.`,
+        );
+      }
+
+      // Fallback: default npm run build
       const result = runCommand('npm run build', repoPath);
       const output = `${result.stdout}\n${result.stderr}`.trim();
       const findings = result.ok
@@ -230,7 +386,30 @@ function createLintRunner(): ModuleRunner {
       return !!pkg?.scripts?.lint;
     },
     async run(repoPath: string, opts: RunOptions) {
+      const resolved = resolveCommand('lint', opts);
+      if (resolved.action === 'not_applicable') {
+        return buildNotApplicableResult('lint', 'Lint command explicitly set to null in .vibecheckrc');
+      }
+
       opts.onProgress?.(20, 'Running lint command...');
+
+      if (resolved.action === 'run') {
+        const result = runCommand(resolved.command, repoPath);
+        const findings = result.ok
+          ? []
+          : parseGenericCommandOutput(
+              'lint', result.stdout, result.stderr, result.exitCode,
+              'lint', 'Fix the lint errors and rerun the lint command.',
+            );
+        return buildResult(
+          result.ok, findings,
+          { exitCode: result.exitCode, errors: findings.length },
+          'Lint passed successfully.',
+          `Lint failed with ${findings.length || 1} diagnostic${findings.length === 1 ? '' : 's'}.`,
+        );
+      }
+
+      // Fallback: default npm run lint with JSON format
       const result = runCommand('npm run lint -- --format json', repoPath);
       const findings = result.ok ? [] : parseLintOutput(result.stdout || result.stderr);
       const fallbackFindings =
@@ -262,6 +441,30 @@ function createTypecheckRunner(): ModuleRunner {
       return existsSync(join(repoPath, 'tsconfig.json'));
     },
     async run(repoPath: string, opts: RunOptions) {
+      const resolved = resolveCommand('typecheck', opts);
+      if (resolved.action === 'not_applicable') {
+        return buildNotApplicableResult('typecheck', 'Typecheck command explicitly set to null in .vibecheckrc');
+      }
+
+      opts.onProgress?.(20, 'Running typecheck command...');
+
+      if (resolved.action === 'run') {
+        const result = runCommand(resolved.command, repoPath);
+        const findings = result.ok
+          ? []
+          : parseGenericCommandOutput(
+              'typecheck', result.stdout, result.stderr, result.exitCode,
+              'typecheck', 'Fix the typecheck errors and rerun the typecheck command.',
+            );
+        return buildResult(
+          result.ok, findings,
+          { exitCode: result.exitCode, errors: findings.length },
+          'Typecheck passed successfully.',
+          `Typecheck failed with ${findings.length || 1} diagnostic${findings.length === 1 ? '' : 's'}.`,
+        );
+      }
+
+      // Fallback: default tsc --noEmit
       opts.onProgress?.(20, 'Running TypeScript typecheck...');
       const result = runCommand('npx tsc --noEmit --pretty false', repoPath);
       const findings = result.ok
@@ -298,7 +501,30 @@ function createTestRunner(): ModuleRunner {
       return !!testScript && !/no test/i.test(testScript);
     },
     async run(repoPath: string, opts: RunOptions) {
+      const resolved = resolveCommand('test', opts);
+      if (resolved.action === 'not_applicable') {
+        return buildNotApplicableResult('test', 'Test command explicitly set to null in .vibecheckrc');
+      }
+
       opts.onProgress?.(20, 'Running test command...');
+
+      if (resolved.action === 'run') {
+        const result = runCommand(resolved.command, repoPath);
+        const findings = result.ok
+          ? []
+          : parseGenericCommandOutput(
+              'test', result.stdout, result.stderr, result.exitCode,
+              'test', 'Fix the test failures and rerun the test command.',
+            );
+        return buildResult(
+          result.ok, findings,
+          { exitCode: result.exitCode, errors: findings.length },
+          'Tests passed successfully.',
+          `Tests failed with ${findings.length || 1} diagnostic${findings.length === 1 ? '' : 's'}.`,
+        );
+      }
+
+      // Fallback: default npm test
       const result = runCommand('npm test -- --runInBand', repoPath);
       const findings = result.ok
         ? []
