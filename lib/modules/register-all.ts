@@ -43,6 +43,7 @@ import './secrets-scan';
 import './config-quality';
 import './telemetry-observability';
 import './execution-checks';
+import './file-size';
 
 // New AI-powered modules
 import './doc-accuracy';
