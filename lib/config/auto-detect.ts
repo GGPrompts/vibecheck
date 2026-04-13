@@ -55,6 +55,38 @@ export interface RepoTraits {
   hasAgentToolingSignals: boolean;
 }
 
+// ── Ecosystem detection ───────────────────────────────────────────────
+
+type Ecosystem = 'rust' | 'go' | 'python' | 'cpp' | 'node';
+
+/**
+ * Detect the primary build ecosystem from root config files.
+ * Returns 'node' as a fallback (existing behavior) when no
+ * compiled-language markers are found.
+ */
+function detectEcosystem(repoPath: string): Ecosystem {
+  if (pathExists(repoPath, 'Cargo.toml')) return 'rust';
+  if (pathExists(repoPath, 'go.mod')) return 'go';
+  if (pathExists(repoPath, 'CMakeLists.txt') || pathExists(repoPath, 'Makefile')) return 'cpp';
+  if (pathExists(repoPath, 'pyproject.toml') || pathExists(repoPath, 'setup.py')) return 'python';
+  return 'node';
+}
+
+/**
+ * Check whether a Cargo workspace has binary targets.
+ * Looks for [[bin]] sections in root Cargo.toml or src/main.rs.
+ */
+function hasCargoCliTarget(repoPath: string): boolean {
+  const cargoPath = join(repoPath, 'Cargo.toml');
+  if (!existsSync(cargoPath)) return false;
+  try {
+    const content = readFileSync(cargoPath, 'utf-8');
+    if (/\[\[bin]]/.test(content)) return true;
+  } catch { /* ignore */ }
+  // Workspace members with src/main.rs or a top-level src/main.rs
+  return pathExists(repoPath, 'src/main.rs');
+}
+
 // ── Entrypoint directory patterns ──────────────────────────────────────
 
 /** Directories whose files are always entrypoints (not dead code). */
@@ -157,13 +189,17 @@ const TRAIT_PATHS = {
   cliEntrypoint: ['bin', 'cli', 'scripts'],
   complianceSignals: [
     'compliance',
-    'security',
-    'audit',
-    'policy',
     'hipaa',
     'gdpr',
     'soc2',
     'privacy',
+  ],
+  /** Weak compliance signals — only count when combined with another signal. */
+  weakComplianceSignals: [
+    'security',
+    'audit',
+    'audits',
+    'policy',
   ],
   agentToolingSignals: [
     'mcp-server',
@@ -341,15 +377,20 @@ function detectFramework(
   return null;
 }
 
-function detectRepoTraits(repoPath: string, pkg: Record<string, unknown> | null, framework: FrameworkDef | null): RepoTraits {
+function detectRepoTraits(repoPath: string, pkg: Record<string, unknown> | null, framework: FrameworkDef | null, ecosystem: Ecosystem): RepoTraits {
   const scripts = getPackageScripts(pkg);
 
   const hasApiRoutes = anyPathExists(repoPath, TRAIT_PATHS.apiRoutes);
-  const hasFrontendBundle = anyPathExists(repoPath, TRAIT_PATHS.frontendBundle)
-    || framework?.name === 'nextjs'
-    || framework?.name === 'remix'
-    || framework?.name === 'nuxt'
-    || framework?.name === 'vite';
+  // Only count generic dirs like `app/` and `components/` as frontend when
+  // the project is a Node/JS project. Compiled-language repos frequently
+  // have `app/` crates or `src/components/` with totally different semantics.
+  const hasFrontendBundle = ecosystem === 'node'
+    ? (anyPathExists(repoPath, TRAIT_PATHS.frontendBundle)
+      || framework?.name === 'nextjs'
+      || framework?.name === 'remix'
+      || framework?.name === 'nuxt'
+      || framework?.name === 'vite')
+    : false;
   const hasPackageLibraryShape = Boolean(
     pkg && (
       typeof pkg.exports === 'object'
@@ -369,14 +410,24 @@ function detectRepoTraits(repoPath: string, pkg: Record<string, unknown> | null,
   const hasCliEntrypoint = Boolean(
     anyPathExists(repoPath, TRAIT_PATHS.cliEntrypoint)
     || typeof pkg?.bin === 'string'
-    || (pkg?.bin && typeof pkg.bin === 'object' && !Array.isArray(pkg.bin)),
+    || (pkg?.bin && typeof pkg.bin === 'object' && !Array.isArray(pkg.bin))
+    || (ecosystem === 'rust' && hasCargoCliTarget(repoPath))
+    || (ecosystem === 'go' && pathExists(repoPath, 'main.go'))
   );
-  const hasComplianceSignals = anyPathExists(repoPath, TRAIT_PATHS.complianceSignals)
+
+  // Compliance: strong signals fire immediately. Weak signals (audit, security,
+  // policy dirs) only count when at least two are present, avoiding false
+  // positives on repos that just happen to have an `audits/` folder.
+  const strongCompliance = anyPathExists(repoPath, TRAIT_PATHS.complianceSignals)
     || Boolean(
       pkg
       && typeof pkg.name === 'string'
-      && /(compliance|security|audit|policy|hipaa|gdpr|soc2|privacy)/i.test(pkg.name),
+      && /(compliance|hipaa|gdpr|soc2|privacy)/i.test(pkg.name),
     );
+  const weakComplianceCount = TRAIT_PATHS.weakComplianceSignals
+    .filter((p) => pathExists(repoPath, p)).length;
+  const hasComplianceSignals = strongCompliance || weakComplianceCount >= 2;
+
   const hasAgentToolingSignals = anyPathExists(repoPath, TRAIT_PATHS.agentToolingSignals)
     || anyPathExists(repoPath, ['mcp-server', 'app/api/mcp', 'src/mcp']);
 
@@ -397,6 +448,7 @@ function detectArchetype(
   framework: FrameworkDef | null,
   traits: RepoTraits,
   contributorCount: number,
+  ecosystem: Ecosystem,
 ): ProjectProfile {
   if (traits.hasComplianceSignals) return 'compliance-sensitive';
   if (traits.hasAgentToolingSignals) return 'agent-tooling';
@@ -421,9 +473,10 @@ function detectArchetype(
   }
   if (traits.hasFrontendBundle) return 'web-app';
 
-  // Tiny repos with no strong service/library signals default to prototype.
-  if (contributorCount <= 1) return 'prototype';
+  // Compiled-language projects with no web signals default to cli.
+  if (ecosystem !== 'node') return 'cli';
 
+  // Repos with no strong signals default to prototype.
   return 'prototype';
 }
 
@@ -456,11 +509,12 @@ function countGitContributors(repoPath: string): number {
 /**
  * Suggest a fallback archetype based on contributor count.
  * Returns null if we cannot determine (let the user or repo-shape detection decide).
+ * This is only used when detectArchetype has no overlay; keep it neutral.
  */
 function suggestProfile(contributorCount: number): ProjectProfile | null {
   if (contributorCount === 0) return null; // can't determine
   if (contributorCount === 1) return 'prototype';
-  return 'web-app';
+  return null; // let detectArchetype decide based on repo shape
 }
 
 // ── Main ───────────────────────────────────────────────────────────────
@@ -489,9 +543,10 @@ export function autoDetect(repoPath: string): AutoDetectResult {
   const framework = detectFramework(repoPath, pkg);
   const frameworkEntryPatterns = framework?.entryPatterns ?? [];
 
-  const repoTraits = detectRepoTraits(repoPath, pkg, framework);
+  const ecosystem = detectEcosystem(repoPath);
+  const repoTraits = detectRepoTraits(repoPath, pkg, framework, ecosystem);
   const contributorCount = countGitContributors(repoPath);
-  const detectedArchetype = detectArchetype(framework, repoTraits, contributorCount);
+  const detectedArchetype = detectArchetype(framework, repoTraits, contributorCount, ecosystem);
 
   // Combine all entry points (deduplicated)
   const knipEntryPoints = Array.from(

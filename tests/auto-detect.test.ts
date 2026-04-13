@@ -22,6 +22,47 @@ test('auto-detect infers web-app and service traits from app/api plus next depen
   assert.equal(result.repoTraits.hasFrontendBundle, true);
 });
 
+test('auto-detect infers cli for Cargo workspace with binary targets', () => {
+  const cargoRepo = createRepoFixture({
+    'Cargo.toml': '[workspace]\nmembers = ["crates/*"]\n\n[[bin]]\nname = "therminal"\npath = "crates/therminal-app/src/main.rs"',
+    'crates/therminal-app/src/main.rs': 'fn main() {}',
+    'scripts/ci.sh': '#!/bin/bash',
+    'audits/something.txt': '',
+  });
+
+  const result = autoDetect(cargoRepo);
+
+  assert.equal(result.detectedArchetype, 'cli');
+  assert.equal(result.repoTraits.hasCliEntrypoint, true);
+  // audits/ alone should NOT trigger compliance
+  assert.equal(result.repoTraits.hasComplianceSignals, false);
+});
+
+test('auto-detect infers cli for Go module with main.go', () => {
+  const goRepo = createRepoFixture({
+    'go.mod': 'module example.com/tool\n\ngo 1.22',
+    'main.go': 'package main\nfunc main() {}',
+  });
+
+  const result = autoDetect(goRepo);
+
+  assert.equal(result.detectedArchetype, 'cli');
+  assert.equal(result.repoTraits.hasCliEntrypoint, true);
+});
+
+test('auto-detect does not treat app/ as frontend in a Rust project', () => {
+  const rustRepo = createRepoFixture({
+    'Cargo.toml': '[package]\nname = "my-app"',
+    'src/main.rs': 'fn main() {}',
+    'app/something.rs': '',
+  });
+
+  const result = autoDetect(rustRepo);
+
+  assert.equal(result.repoTraits.hasFrontendBundle, false);
+  assert.equal(result.detectedArchetype, 'cli');
+});
+
 test('auto-detect infers library, cli, and agent-tooling shapes from repo layout', () => {
   const libraryRepo = createRepoFixture({
     'package.json': JSON.stringify({
