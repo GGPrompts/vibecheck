@@ -14,6 +14,8 @@ interface ScanConfig {
 
 // ── Schema ──────────────────────────────────────────────────────────────
 
+const commandSchema = z.union([z.string(), z.null()]);
+
 const vibecheckRcSchema = z.object({
   /** Enable/disable individual modules by id (true = enabled, false = disabled). */
   modules: z.record(z.string(), z.boolean()).optional(),
@@ -38,6 +40,20 @@ const vibecheckRcSchema = z.object({
 
   /** Repo archetype — adjusts scoring, module selection, and thresholds for the repo shape. */
   profile: z.string().optional(),
+
+  /**
+   * Per-project command overrides for execution-check modules.
+   * Set to a string to override the default command (e.g. "cargo test").
+   * Set to null to mark the module as not_applicable.
+   * Omit to fall back to auto-detection.
+   */
+  commands: z.object({
+    build: commandSchema.optional(),
+    lint: commandSchema.optional(),
+    typecheck: commandSchema.optional(),
+    test: commandSchema.optional(),
+    ci: commandSchema.optional(),
+  }).optional(),
 });
 
 export interface VibecheckRc extends Omit<z.infer<typeof vibecheckRcSchema>, 'profile'> {
@@ -142,7 +158,7 @@ export function mergeWithRc(
     }
   }
 
-  // ── thresholds / aiTokenBudget / ignore ──
+  // ── thresholds / aiTokenBudget / ignore / commands ──
   // Attach as extra fields on the config snapshot so they survive
   // serialisation to the DB and are available for downstream consumers.
   // We use a namespaced `rc` key to avoid collisions with core fields.
@@ -150,6 +166,7 @@ export function mergeWithRc(
     ...(rc.thresholds ? { thresholds: rc.thresholds } : {}),
     ...(rc.aiTokenBudget != null ? { aiTokenBudget: rc.aiTokenBudget } : {}),
     ...(rc.ignore ? { ignore: rc.ignore } : {}),
+    ...(rc.commands ? { commands: rc.commands } : {}),
   };
 
   return merged;

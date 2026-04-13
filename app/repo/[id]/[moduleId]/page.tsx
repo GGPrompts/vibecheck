@@ -11,7 +11,7 @@ import { FindingsTable } from '@/components/findings-table';
 import { TreemapViz } from '@/components/treemap-viz';
 import { DepGraphViz } from '@/components/dep-graph-viz';
 import { BusFactorHeatmap } from '@/components/bus-factor-heatmap';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Terminal, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface RepoData {
@@ -56,6 +56,88 @@ function formatStateLabel(state: string | undefined): string {
     .split('_')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
+}
+
+function extractInstallCommand(text: string): { command: string; description: string } | null {
+  const installWithMatch = text.match(/Install with:\s*(.+)/i);
+  if (installWithMatch) {
+    return {
+      command: installWithMatch[1].trim(),
+      description: text.slice(0, text.indexOf('Install with:')).trim().replace(/[.\s]+$/, ''),
+    };
+  }
+
+  const installForMatch = text.match(/Install\s+\S+\s+for\b[^:]*:\s*(.+)/i);
+  if (installForMatch) {
+    return {
+      command: installForMatch[1].trim(),
+      description: text.slice(0, text.indexOf('Install')).trim().replace(/[.\s]+$/, ''),
+    };
+  }
+
+  const directMatch = text.match(/((?:cargo|npm|go|pip)\s+install\s+\S+(?:\s+\S+)*)/);
+  if (directMatch) {
+    return {
+      command: directMatch[1].trim(),
+      description: text.replace(directMatch[0], '').trim().replace(/[.\s]+$/, ''),
+    };
+  }
+
+  return null;
+}
+
+function InstallBanner({ text }: { text: string }) {
+  const [copied, setCopied] = React.useState(false);
+  const parsed = extractInstallCommand(text);
+
+  if (!parsed) return null;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(parsed.command).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950/40">
+      <div className="flex items-start gap-3">
+        <Terminal className="mt-0.5 size-5 shrink-0 text-amber-600 dark:text-amber-400" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+            Required tool not installed
+          </p>
+          {parsed.description && (
+            <p className="text-sm text-amber-700 dark:text-amber-400">
+              {parsed.description}
+            </p>
+          )}
+          <div className="flex items-center gap-2">
+            <code className="flex-1 rounded-md bg-amber-100 px-3 py-1.5 font-mono text-sm text-amber-900 dark:bg-amber-900/50 dark:text-amber-200">
+              {parsed.command}
+            </code>
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-amber-300 bg-amber-100 px-2.5 py-1.5 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-200 dark:border-amber-600 dark:bg-amber-900/50 dark:text-amber-200 dark:hover:bg-amber-800"
+            >
+              {copied ? (
+                <>
+                  <Check className="size-3.5" />
+                  Copied
+                </>
+              ) : (
+                <>
+                  <Copy className="size-3.5" />
+                  Copy
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function ModulePage() {
@@ -189,11 +271,15 @@ export default function ModulePage() {
               {moduleData.findings.length} findings
             </span>
           </div>
-          {moduleData.stateReason && (
+          {moduleData.state === 'unavailable' &&
+            moduleData.stateReason &&
+            extractInstallCommand(moduleData.stateReason) ? (
+              <InstallBanner text={moduleData.stateReason} />
+          ) : moduleData.stateReason ? (
             <p className="text-sm text-muted-foreground max-w-2xl">
               {moduleData.stateReason}
             </p>
-          )}
+          ) : null}
           {moduleData.summary && (
             <p className="text-sm text-muted-foreground max-w-2xl">
               {moduleData.summary}

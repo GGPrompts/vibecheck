@@ -189,9 +189,12 @@ export async function runScan(
   // Filter findings by ignore patterns from .vibecheckrc
   const ignorePatterns: string[] = (config as ScanConfig & { rc?: { ignore?: string[] } } | undefined)?.rc?.ignore ?? [];
 
+  // Extract per-project command overrides from .vibecheckrc
+  const commands = (config as ScanConfig & { rc?: { commands?: Record<string, string | null> } } | undefined)?.rc?.commands;
+
   // Execute modules and collect results
   const { resultSummaries, moduleErrors } = await executeModules(
-    enabledModules, repoPath, scanId, fileRoles, ignorePatterns, autoDetected,
+    enabledModules, repoPath, scanId, fileRoles, ignorePatterns, autoDetected, commands,
   );
 
   const archetypeWeights = buildArchetypeWeights(
@@ -249,6 +252,7 @@ async function executeModules(
   fileRoles: Map<string, string[]>,
   ignorePatterns: string[],
   autoDetected: AutoDetectResult,
+  commands?: Record<string, string | null>,
 ): Promise<{ resultSummaries: ResultSummary[]; moduleErrors: number }> {
   const resultSummaries: ResultSummary[] = [];
   let moduleErrors = 0;
@@ -298,14 +302,22 @@ async function executeModules(
           });
         },
         fileRoles,
-      autoDetect: {
-        detectedArchetype: autoDetected.detectedArchetype,
-        repoTraits: autoDetected.repoTraits,
-        knipEntryPoints: autoDetected.knipEntryPoints,
-        knipIgnorePatterns: autoDetected.knipIgnorePatterns,
-        deadCodeExemptRoles: autoDetected.deadCodeExemptRoles,
+        autoDetect: {
+          detectedArchetype: autoDetected.detectedArchetype,
+          repoTraits: autoDetected.repoTraits,
+          knipEntryPoints: autoDetected.knipEntryPoints,
+          knipIgnorePatterns: autoDetected.knipIgnorePatterns,
+          deadCodeExemptRoles: autoDetected.deadCodeExemptRoles,
         },
+        commands,
       });
+
+      // Modules that return score=-1 without an explicit state are unavailable.
+      // Promote them so the UI can surface actionable install instructions.
+      if (result.score === -1 && !result.state) {
+        result.state = 'unavailable';
+        result.stateReason = result.stateReason ?? result.summary;
+      }
 
       saveModuleResult(scanId, definition.id, result, ignorePatterns);
 

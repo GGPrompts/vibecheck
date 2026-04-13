@@ -38,6 +38,13 @@ export interface RunOptions {
   fileRoles?: Map<string, string[]>;
   /** Auto-detected repo info for modules that need it (e.g. dead-code). */
   autoDetect?: AutoDetectInfo;
+  /**
+   * Per-project command overrides from .vibecheckrc.
+   * If a key maps to a string, that command replaces the default.
+   * If a key maps to null, the module should return not_applicable.
+   * If a key is absent, fall back to auto-detection.
+   */
+  commands?: Record<string, string | null>;
 }
 
 export interface Finding {

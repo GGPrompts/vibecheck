@@ -1,7 +1,8 @@
 'use client';
 
+import * as React from 'react';
 import Link from 'next/link';
-import { AlertTriangle, CheckCircle, MinusCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, MinusCircle, Copy, Check, Terminal } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -31,6 +32,93 @@ function scoreColor(score: number): string {
 function truncate(text: string, max = 60): string {
   if (text.length <= max) return text;
   return text.slice(0, max - 3) + '...';
+}
+
+/**
+ * Extract an install command from a stateReason string.
+ * Matches patterns like:
+ *   "Install with: cargo install cargo-audit"
+ *   "cargo install cargo-outdated"
+ *   "npm install -g dependency-cruiser"
+ *   "go install golang.org/x/tools/cmd/deadcode@latest"
+ */
+function extractInstallCommand(text: string): { command: string; description: string } | null {
+  // Pattern: "Install with: <command>"
+  const installWithMatch = text.match(/Install with:\s*(.+)/i);
+  if (installWithMatch) {
+    return {
+      command: installWithMatch[1].trim(),
+      description: text.slice(0, text.indexOf('Install with:')).trim().replace(/[.\s]+$/, ''),
+    };
+  }
+
+  // Pattern: "Install <tool> for best results: <command>"
+  const installForMatch = text.match(/Install\s+\S+\s+for\b[^:]*:\s*(.+)/i);
+  if (installForMatch) {
+    return {
+      command: installForMatch[1].trim(),
+      description: text.slice(0, text.indexOf('Install')).trim().replace(/[.\s]+$/, ''),
+    };
+  }
+
+  // Direct command patterns (cargo install, npm install -g, go install, pip install)
+  const directMatch = text.match(/((?:cargo|npm|go|pip)\s+install\s+\S+(?:\s+\S+)*)/);
+  if (directMatch) {
+    return {
+      command: directMatch[1].trim(),
+      description: text.replace(directMatch[0], '').trim().replace(/[.\s]+$/, ''),
+    };
+  }
+
+  return null;
+}
+
+function InstallCommandCallout({ text }: { text: string }) {
+  const [copied, setCopied] = React.useState(false);
+  const parsed = extractInstallCommand(text);
+
+  if (!parsed) return null;
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    navigator.clipboard.writeText(parsed.command).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 dark:border-amber-700 dark:bg-amber-950/40">
+      <div className="flex items-start gap-2">
+        <Terminal className="mt-0.5 size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+        <div className="min-w-0 flex-1 space-y-1.5">
+          {parsed.description && (
+            <p className="text-xs text-amber-800 dark:text-amber-300">
+              {parsed.description}
+            </p>
+          )}
+          <div className="flex items-center gap-1.5">
+            <code className="flex-1 truncate rounded bg-amber-100 px-1.5 py-0.5 font-mono text-xs text-amber-900 dark:bg-amber-900/50 dark:text-amber-200">
+              {parsed.command}
+            </code>
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="shrink-0 rounded p-0.5 text-amber-600 transition-colors hover:bg-amber-200 hover:text-amber-800 dark:text-amber-400 dark:hover:bg-amber-800 dark:hover:text-amber-200"
+              title="Copy command"
+            >
+              {copied ? (
+                <Check className="size-3" />
+              ) : (
+                <Copy className="size-3" />
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ConfidenceBadge({ confidence }: { confidence: number }) {
@@ -119,9 +207,13 @@ export function ModuleScoreCard({
                 )}
                 {stateLabel}
               </Badge>
-              <p className="text-sm text-muted-foreground">
-                {stateReason ?? 'This module was excluded from the overall score.'}
-              </p>
+              {state === 'unavailable' && stateReason && extractInstallCommand(stateReason) ? (
+                <InstallCommandCallout text={stateReason} />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {stateReason ?? 'This module was excluded from the overall score.'}
+                </p>
+              )}
             </div>
           )}
           {top3Findings.length > 0 && (
