@@ -22,6 +22,12 @@ const SKIP_DIRS = new Set([
   'coverage',
   '.turbo',
   '.cache',
+  '.vercel',
+  '.output',
+  '.nuxt',
+  '.venv',
+  'venv',
+  '__pycache__',
 ]);
 
 /**
