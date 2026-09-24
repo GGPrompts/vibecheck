@@ -16,10 +16,17 @@ interface GrepMatch {
  * Run a grep command and parse results into structured matches.
  * Returns an empty array if the pattern is not found.
  */
+const GREP_EXCLUDES = [
+  'node_modules', '.git', '.next', '.nuxt', '.output', 'dist', 'build',
+  'coverage', '.turbo', '.cache', '.venv', 'venv', '__pycache__', '.worktrees', '.beads',
+]
+  .map((d) => `--exclude-dir=${d}`)
+  .join(' ');
+
 function grepPattern(repoPath: string, pattern: string): GrepMatch[] {
   try {
     const stdout = execSync(
-      `grep -rn --include='*.ts' --include='*.tsx' -E ${JSON.stringify(pattern)} . || true`,
+      `grep -rn --include='*.ts' --include='*.tsx' ${GREP_EXCLUDES} -E ${JSON.stringify(pattern)} . || true`,
       {
         cwd: repoPath,
         encoding: 'utf-8',

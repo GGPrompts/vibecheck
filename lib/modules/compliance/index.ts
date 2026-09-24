@@ -2,7 +2,7 @@ import { registerModule } from '../registry';
 import type { ModuleRunner, ModuleResult, RunOptions, Finding } from '../types';
 import { hipaaRules } from './rules/hipaa';
 import type { ComplianceRule } from './rules/hipaa';
-import { scanWithRule } from './scanner';
+import { scanWithRules } from './scanner';
 
 /**
  * Severity deductions for scoring. More severe findings reduce the score more.
@@ -38,28 +38,16 @@ function createComplianceRunner(rules: ComplianceRule[]): ModuleRunner {
     async run(repoPath: string, opts: RunOptions): Promise<ModuleResult> {
       opts.onProgress?.(5, 'Starting HIPAA compliance scan...');
 
-      const allFindings: Finding[] = [];
       const totalRules = rules.length;
+      let allFindings: Finding[] = [];
 
-      for (let i = 0; i < totalRules; i++) {
-        const rule = rules[i];
-
-        // Check for abort
-        if (opts.signal?.aborted) {
-          break;
-        }
-
-        // Report progress
-        const pct = Math.round(5 + (90 * (i + 1)) / totalRules);
-        opts.onProgress?.(pct, `Scanning rule: ${rule.name}`);
-
+      if (!opts.signal?.aborted) {
+        opts.onProgress?.(10, `Scanning ${totalRules} rules in one pass...`);
         try {
-          const findings = await scanWithRule(repoPath, rule);
-          allFindings.push(...findings);
+          allFindings = await scanWithRules(repoPath, rules);
         } catch (err) {
-          // Log but don't fail the entire scan for one rule
           console.warn(
-            `[compliance] Rule "${rule.id}" failed:`,
+            '[compliance] Scan failed:',
             err instanceof Error ? err.message : String(err)
           );
         }

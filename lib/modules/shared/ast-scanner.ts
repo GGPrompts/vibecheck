@@ -139,33 +139,47 @@ function isFileCompatible(fileLang: string, ruleLanguage: string): boolean {
 }
 
 /**
- * Scan source files in a repository for matches against a structural pattern rule.
- * This is the generic scanning engine used by both compliance and custom ast-rules modules.
+ * Scan source files in a repository for matches against many structural pattern
+ * rules in a single pass. Each file is read once and parsed once per distinct
+ * parse language, then every compatible rule runs against that tree. Native
+ * ast-grep trees are large, so parsing once per rule (the previous shape)
+ * multiplied memory by the rule count and was OOM-killed on mid-size repos.
+ *
+ * Returns matches keyed by rule id; every rule id is present, possibly empty.
  */
-export function scanFiles(
+export function scanFilesWithRules(
   repoPath: string,
-  rule: ScanRule,
+  rules: ScanRule[],
   astGrep: NonNullable<ReturnType<typeof tryLoadAstGrep>>
-): ScanMatch[] {
+): Map<string, ScanMatch[]> {
   const { parse: astParse, Lang } = astGrep;
 
-  const matches: ScanMatch[] = [];
-  const sourceFiles = collectSourceFiles(repoPath);
-
-  const ruleLang = resolveLang(Lang, rule.language);
-  if (ruleLang == null) {
-    console.warn(
-      `[ast-scanner] Unsupported language "${rule.language}" for rule: ${rule.id}`
-    );
-    return [];
+  const results = new Map<string, ScanMatch[]>();
+  const usable: { rule: ScanRule; ruleLang: unknown }[] = [];
+  for (const rule of rules) {
+    results.set(rule.id, []);
+    const ruleLang = resolveLang(Lang, rule.language);
+    if (ruleLang == null) {
+      console.warn(
+        `[ast-scanner] Unsupported language "${rule.language}" for rule: ${rule.id}`
+      );
+      continue;
+    }
+    usable.push({ rule, ruleLang });
   }
+  if (usable.length === 0) return results;
+
+  const sourceFiles = collectSourceFiles(repoPath);
 
   for (const filePath of sourceFiles) {
     const ext = extname(filePath);
     const fileLang = EXTENSION_TO_LANG[ext];
-
     if (!fileLang) continue;
-    if (!isFileCompatible(fileLang, rule.language)) continue;
+
+    const applicable = usable.filter(({ rule }) =>
+      isFileCompatible(fileLang, rule.language)
+    );
+    if (applicable.length === 0) continue;
 
     let source: string;
     try {
@@ -174,38 +188,57 @@ export function scanFiles(
       continue;
     }
 
-    // Parse with the appropriate language — use Tsx for .tsx/.jsx files
-    const parseLang =
-      fileLang === 'Tsx' ? Lang.Tsx : (ruleLang as typeof Lang.TypeScript);
-    let root;
-    try {
-      root = astParse(parseLang, source);
-    } catch {
-      continue;
-    }
+    const relativePath = filePath.startsWith(repoPath)
+      ? filePath.slice(repoPath.length + 1)
+      : filePath;
 
-    const rootNode = root.root();
-    let nodeMatches;
-    try {
-      nodeMatches = rootNode.findAll(rule.pattern);
-    } catch {
-      continue;
-    }
+    // One parse per distinct parse language for this file (Tsx files always
+    // parse as Tsx; everything else parses as the rule's language).
+    const roots = new Map<unknown, ReturnType<typeof astParse> | null>();
+    for (const { rule, ruleLang } of applicable) {
+      const parseLang = fileLang === 'Tsx' ? Lang.Tsx : ruleLang;
+      if (!roots.has(parseLang)) {
+        try {
+          roots.set(parseLang, astParse(parseLang as typeof Lang.TypeScript, source));
+        } catch {
+          roots.set(parseLang, null);
+        }
+      }
+      const root = roots.get(parseLang);
+      if (!root) continue;
 
-    for (const match of nodeMatches) {
-      const range = match.range();
-      const relativePath = filePath.startsWith(repoPath)
-        ? filePath.slice(repoPath.length + 1)
-        : filePath;
+      let nodeMatches;
+      try {
+        nodeMatches = root.root().findAll(rule.pattern);
+      } catch {
+        continue;
+      }
 
-      matches.push({
-        filePath,
-        relativePath,
-        line: range.start.line + 1, // ast-grep lines are 0-indexed
-        matchText: match.text(),
-      });
+      const bucket = results.get(rule.id)!;
+      for (const match of nodeMatches) {
+        const range = match.range();
+        bucket.push({
+          filePath,
+          relativePath,
+          line: range.start.line + 1, // ast-grep lines are 0-indexed
+          matchText: match.text(),
+        });
+      }
     }
   }
 
-  return matches;
+  return results;
+}
+
+/**
+ * Scan source files in a repository for matches against a single structural
+ * pattern rule. Callers with many rules should use scanFilesWithRules so each
+ * file is parsed once rather than once per rule.
+ */
+export function scanFiles(
+  repoPath: string,
+  rule: ScanRule,
+  astGrep: NonNullable<ReturnType<typeof tryLoadAstGrep>>
+): ScanMatch[] {
+  return scanFilesWithRules(repoPath, [rule], astGrep).get(rule.id) ?? [];
 }
