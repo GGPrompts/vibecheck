@@ -337,7 +337,8 @@ if (promptMode || jsonMode) {
     process.exit(1);
   });
 
-  child.on('exit', (code) => {
+  // 'close' (not 'exit') so the piped stdout has fully drained before we exit
+  child.on('close', (code) => {
     process.exit(code ?? 1);
   });
 } else {
